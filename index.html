@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 마이 리틀 퍼피 (My Little Puppy)</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+    
+    <!-- Three.js와 OrbitControls 가져오기를 위한 Import Map 설정 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <!-- 3D 렌더링 영역 -->
+    <div id="canvas-container"></div>
+
+    <!-- UI 오버레이 -->
+    <div id="ui-container">
+        
+        <!-- 상단 헤더: 호감도 레벨 및 정보 -->
+        <header class="game-header">
+            <div class="pet-profile">
+                <span class="pet-emoji">🐶</span>
+                <div class="pet-info">
+                    <h1 id="pet-name">바둑이</h1>
+                    <span id="pet-status-text">행복함</span>
+                </div>
+            </div>
+            <div class="affinity-container">
+                <div class="affinity-label">
+                    <span>❤️ 호감도 레벨 <strong id="affinity-level">1</strong></span>
+                    <span id="affinity-pct">0%</span>
+                </div>
+                <div class="affinity-bar-outer">
+                    <div id="affinity-bar-fill" class="affinity-bar-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 좌측 패널: 강아지 욕구 상태 (목마름, 배고픔, 청결도) -->
+        <div class="status-panel">
+            <div class="status-item" id="status-hunger">
+                <div class="status-icon">🍖</div>
+                <div class="status-bar-wrapper">
+                    <span class="status-name">포만감</span>
+                    <div class="status-bar-outer">
+                        <div class="status-bar-inner hunger-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-item" id="status-thirst">
+                <div class="status-icon">💧</div>
+                <div class="status-bar-wrapper">
+                    <span class="status-name">수분</span>
+                    <div class="status-bar-outer">
+                        <div class="status-bar-inner thirst-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-item" id="status-cleanliness">
+                <div class="status-icon">🧼</div>
+                <div class="status-bar-wrapper">
+                    <span class="status-name">청결도</span>
+                    <div class="status-bar-outer">
+                        <div class="status-bar-inner cleanliness-fill" style="width: 100%;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 알림 메시지 오버레이 -->
+        <div id="game-notification" class="game-notification hidden"></div>
+
+        <!-- 하단 패널: 상호작용 기본 액션 -->
+        <div class="action-panel">
+            <button id="btn-pet" class="action-btn">
+                <span class="btn-icon">👋</span> 쓰다듬기
+            </button>
+            <button id="btn-feed" class="action-btn">
+                <span class="btn-icon">🍖</span> 밥 주기
+            </button>
+            <button id="btn-water" class="action-btn">
+                <span class="btn-icon">💧</span> 물 주기
+            </button>
+            <button id="btn-clean" class="action-btn">
+                <span class="btn-icon">🧹</span> 똥 치우기
+            </button>
+            <button id="btn-edit-mode" class="action-btn toggle-btn">
+                <span class="btn-icon">🛠️</span> 배치하기
+            </button>
+        </div>
+
+        <!-- 우측 상점/인벤토리 패널 (배치 모드에서 활성화) -->
+        <div id="shop-panel" class="shop-panel hidden">
+            <div class="shop-header">
+                <h2>🐾 아이템 상점</h2>
+                <p>호감도 레벨이 오르면 더 좋은 제품이 열려요!</p>
+            </div>
+            
+            <div class="shop-tabs">
+                <button class="tab-btn active" data-category="house">집</button>
+                <button class="tab-btn" data-category="bowl">밥그릇</button>
+                <button class="tab-btn" data-category="toy">장난감</button>
+                <button class="tab-btn" data-category="clothes">옷</button>
+            </div>
+
+            <div class="shop-items-grid" id="shop-items-list">
+                <!-- 동적으로 상태에 따라 해금 여부와 함께 렌더링됨 -->
+            </div>
+
+            <div class="shop-actions">
+                <p class="edit-hint">💡 마우스로 땅을 클릭하여 아이템을 설치하세요.</p>
+                <button id="btn-exit-edit" class="exit-btn">배치 완료</button>
+            </div>
+        </div>
+
+        <!-- 개발자 모드 치트 패널 (테스트용) -->
+        <div class="cheat-panel-collapsed" id="cheat-toggle">🧪 치트 도구</div>
+        <div class="cheat-panel hidden" id="cheat-content">
+            <h3>🧪 테스트 컨트롤</h3>
+            <div class="cheat-buttons">
+                <button id="cheat-poop">💩 즉시 똥 싸기</button>
+                <button id="cheat-thirsty">💧 즉시 목마름</button>
+                <button id="cheat-hungry">🍖 즉시 배고픔</button>
+                <button id="cheat-love">❤️ 호감도 +20%</button>
+                <button id="cheat-reset">🔄 데이터 초기화</button>
+            </div>
+            <button id="cheat-close" class="cheat-close-btn">닫기</button>
+        </div>
+    </div>
+
+    <!-- 하트 파티클 레이어 -->
+    <div id="particle-container"></div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
