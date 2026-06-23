@@ -26,13 +26,16 @@
     <!-- UI 오버레이 -->
     <div id="ui-container">
         
-        <!-- 상단 헤더: 호감도 레벨 및 정보 -->
+        <!-- 상단 헤더: 호감도 레벨 및 정보 + 날씨 표시 -->
         <header class="game-header">
             <div class="pet-profile">
                 <span class="pet-emoji">🐶</span>
                 <div class="pet-info">
                     <h1 id="pet-name">바둑이</h1>
-                    <span id="pet-status-text">행복함</span>
+                    <div class="status-meta">
+                        <span id="pet-status-text">행복함</span>
+                        <span id="weather-badge" class="weather-badge">☀️ 맑음</span>
+                    </div>
                 </div>
             </div>
             <div class="affinity-container">
@@ -91,6 +94,9 @@
             <button id="btn-water" class="action-btn">
                 <span class="btn-icon">💧</span> 물 주기
             </button>
+            <button id="btn-walk" class="action-btn">
+                <span class="btn-icon">🦮</span> 산책하기
+            </button>
             <button id="btn-clean" class="action-btn">
                 <span class="btn-icon">🧹</span> 똥 치우기
             </button>
@@ -103,7 +109,7 @@
         <div id="shop-panel" class="shop-panel hidden">
             <div class="shop-header">
                 <h2>🐾 아이템 상점</h2>
-                <p>호감도 레벨이 오르면 더 좋은 제품이 열려요!</p>
+                <p>호감도 레벨이 오르면 더 좋은 제품이 열려요! (최대 Lv.5)</p>
             </div>
             
             <div class="shop-tabs">
@@ -121,20 +127,6 @@
                 <p class="edit-hint">💡 마우스로 땅을 클릭하여 아이템을 설치하세요.</p>
                 <button id="btn-exit-edit" class="exit-btn">배치 완료</button>
             </div>
-        </div>
-
-        <!-- 개발자 모드 치트 패널 (테스트용) -->
-        <div class="cheat-panel-collapsed" id="cheat-toggle">🧪 치트 도구</div>
-        <div class="cheat-panel hidden" id="cheat-content">
-            <h3>🧪 테스트 컨트롤</h3>
-            <div class="cheat-buttons">
-                <button id="cheat-poop">💩 즉시 똥 싸기</button>
-                <button id="cheat-thirsty">💧 즉시 목마름</button>
-                <button id="cheat-hungry">🍖 즉시 배고픔</button>
-                <button id="cheat-love">❤️ 호감도 +20%</button>
-                <button id="cheat-reset">🔄 데이터 초기화</button>
-            </div>
-            <button id="cheat-close" class="cheat-close-btn">닫기</button>
         </div>
     </div>
 

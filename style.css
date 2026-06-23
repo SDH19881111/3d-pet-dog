@@ -1,7 +1,7 @@
 :root {
     --bg-gradient: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    --panel-bg: rgba(255, 255, 255, 0.7);
-    --panel-border: rgba(255, 255, 255, 0.4);
+    --panel-bg: rgba(255, 255, 255, 0.72);
+    --panel-border: rgba(255, 255, 255, 0.45);
     --text-color: #2d3748;
     --text-secondary: #718096;
     --primary: #ff7b90;
@@ -10,8 +10,8 @@
     --secondary-hover: #319795;
     --accent: #f6ad55;
     --danger: #fc8181;
-    --glass-blur: blur(12px);
-    --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+    --glass-blur: blur(16px);
+    --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.06);
     --transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
@@ -49,7 +49,7 @@ body, html {
     width: 100%;
     height: 100%;
     z-index: 10;
-    pointer-events: none; /* UI 요소 이외에는 3D 씬이 마우스 입력을 받도록 함 */
+    pointer-events: none;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -57,17 +57,7 @@ body, html {
 }
 
 #ui-container * {
-    pointer-events: auto; /* UI 하위 요소들은 클릭 가능하게 복구 */
-}
-
-/* Glassmorphism Common Style */
-.glass-panel {
-    background: var(--panel-bg);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--panel-border);
-    border-radius: 20px;
-    box-shadow: var(--shadow);
+    pointer-events: auto;
 }
 
 /* Header UI */
@@ -83,7 +73,7 @@ body, html {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--panel-border);
-    border-radius: 20px;
+    border-radius: 24px;
     box-shadow: var(--shadow);
     animation: slideDown 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -108,11 +98,34 @@ body, html {
     color: #1a202c;
 }
 
-.pet-info span {
+.status-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.status-meta #pet-status-text {
     font-size: 0.85rem;
-    color: var(--secondary-hover);
     font-weight: 600;
 }
+
+.weather-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: rgba(0,0,0,0.05);
+    color: var(--text-color);
+    display: inline-block;
+    transition: var(--transition);
+}
+
+/* Weather classes */
+.weather-badge.clear { background: #ffeeb2; color: #b7791f; }
+.weather-badge.rain { background: #ebf8ff; color: #2b6cb0; }
+.weather-badge.heatwave { background: #fed7d7; color: #c53030; }
+.weather-badge.wind { background: #e2e8f0; color: #4a5568; }
 
 .affinity-container {
     width: 250px;
@@ -146,7 +159,7 @@ body, html {
 .status-panel {
     position: absolute;
     left: 20px;
-    top: 100px;
+    top: 105px;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -156,7 +169,7 @@ body, html {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--panel-border);
-    border-radius: 20px;
+    border-radius: 24px;
     box-shadow: var(--shadow);
     animation: slideRight 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -207,13 +220,13 @@ body, html {
     top: 100px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(45, 55, 72, 0.9);
+    background: rgba(45, 55, 72, 0.92);
     color: white;
     padding: 10px 20px;
     border-radius: 30px;
     font-size: 0.9rem;
     font-weight: 600;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
     transition: opacity 0.3s ease, transform 0.3s ease;
     z-index: 100;
 }
@@ -229,14 +242,14 @@ body, html {
     display: flex;
     justify-content: center;
     gap: 12px;
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
     padding: 15px 20px;
     background: var(--panel-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--panel-border);
-    border-radius: 20px;
+    border-radius: 24px;
     box-shadow: var(--shadow);
     animation: slideUp 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -248,10 +261,10 @@ body, html {
     font-family: inherit;
     font-size: 0.95rem;
     font-weight: 600;
-    border-radius: 12px;
+    border-radius: 14px;
     background: white;
     color: var(--text-color);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.03);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -261,7 +274,7 @@ body, html {
 
 .action-btn:hover {
     transform: translateY(-3px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.06);
 }
 
 .action-btn:active {
@@ -274,6 +287,14 @@ body, html {
 }
 .action-btn#btn-pet:hover {
     background: linear-gradient(135deg, #ffe3e3 0%, #ffccd5 100%);
+}
+
+.action-btn#btn-walk {
+    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    border: 1px solid #bbf7d0;
+}
+.action-btn#btn-walk:hover {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
 }
 
 .action-btn.toggle-btn.active {
@@ -295,7 +316,7 @@ body, html {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--panel-border);
-    border-radius: 24px;
+    border-radius: 28px;
     box-shadow: var(--shadow);
     transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.3s ease;
     animation: slideLeft 0.6s cubic-bezier(0.25, 1, 0.5, 1);
@@ -374,8 +395,8 @@ body, html {
     gap: 15px;
     padding: 12px;
     background: white;
-    border-radius: 16px;
-    border: 1px solid rgba(0,0,0,0.03);
+    border-radius: 18px;
+    border: 1px solid rgba(0,0,0,0.02);
     cursor: pointer;
     transition: var(--transition);
 }
@@ -387,7 +408,7 @@ body, html {
 
 .shop-item-card.locked {
     background: #edf2f7;
-    opacity: 0.7;
+    opacity: 0.65;
     cursor: not-allowed;
 }
 
@@ -399,7 +420,7 @@ body, html {
 .item-visual {
     width: 48px;
     height: 48px;
-    border-radius: 12px;
+    border-radius: 14px;
     background: #f7fafc;
     display: flex;
     align-items: center;
@@ -410,7 +431,7 @@ body, html {
 
 .shop-item-card.locked .item-visual {
     filter: grayscale(100%);
-    opacity: 0.5;
+    opacity: 0.4;
 }
 
 .item-details {
@@ -431,11 +452,12 @@ body, html {
 
 .item-unlock-badge {
     font-size: 0.7rem;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 8px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 10px;
     background: #edf2f7;
     color: var(--text-secondary);
+    white-space: nowrap;
 }
 
 .locked .item-unlock-badge {
@@ -463,7 +485,7 @@ body, html {
     font-size: 0.9rem;
     font-weight: 600;
     padding: 12px;
-    border-radius: 12px;
+    border-radius: 14px;
     background: var(--text-color);
     color: white;
     cursor: pointer;
@@ -481,91 +503,6 @@ body, html {
     font-size: 1.5rem;
     animation: particleUp 1s ease-out forwards;
     z-index: 1000;
-}
-
-/* Cheat Panel Styling */
-.cheat-panel-collapsed {
-    position: absolute;
-    right: 20px;
-    bottom: 20px;
-    background: var(--text-color);
-    color: white;
-    padding: 8px 15px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: var(--shadow);
-    transition: var(--transition);
-    z-index: 50;
-}
-.cheat-panel-collapsed:hover {
-    transform: translateY(-2px);
-    background: #000;
-}
-
-.cheat-panel {
-    position: absolute;
-    right: 20px;
-    bottom: 20px;
-    width: 250px;
-    padding: 15px;
-    background: rgba(45, 55, 72, 0.95);
-    backdrop-filter: var(--glass-blur);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: white;
-    border-radius: 16px;
-    box-shadow: var(--shadow);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 50;
-}
-
-.cheat-panel.hidden {
-    display: none;
-}
-
-.cheat-panel h3 {
-    font-size: 0.85rem;
-    font-weight: 700;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 5px;
-}
-
-.cheat-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.cheat-buttons button {
-    border: none;
-    outline: none;
-    padding: 8px;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.15);
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.2s;
-}
-
-.cheat-buttons button:hover {
-    background: rgba(255,255,255,0.3);
-}
-
-.cheat-close-btn {
-    border: none;
-    outline: none;
-    background: none;
-    color: #a0aec0;
-    cursor: pointer;
-    font-size: 0.7rem;
-    text-decoration: underline;
-    align-self: center;
 }
 
 /* Animations */
