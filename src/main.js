@@ -8,6 +8,7 @@ import { createItemMesh, createPoopMesh, createTrashMesh } from './items.js';
 let scene, camera, renderer, controls;
 let dog;
 let clock;
+let groundMaterial, fenceGroup, treesArray;
 
 // 3D 오브젝트 컬렉션
 const placed3DItems = {}; 
@@ -154,8 +155,8 @@ function init() {
 function buildEnvironment() {
     const groundGeo = new THREE.CylinderGeometry(5.8, 5.8, 0.2, 36);
     // 인스턴스로 바인딩하여 비가 올 때 어둡게 젖도록 처리 지원
-    this.groundMaterial = new THREE.MeshStandardMaterial({ color: 0xabebc6, roughness: 0.95 }); 
-    groundPlane = new THREE.Mesh(groundGeo, this.groundMaterial);
+    groundMaterial = new THREE.MeshStandardMaterial({ color: 0xabebc6, roughness: 0.95 }); 
+    groundPlane = new THREE.Mesh(groundGeo, groundMaterial);
     groundPlane.position.y = -0.1;
     groundPlane.receiveShadow = true;
     scene.add(groundPlane);
@@ -164,7 +165,7 @@ function buildEnvironment() {
     const fenceMat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.9 });
     const fenceGeo = new THREE.CapsuleGeometry(0.04, 0.22, 6, 12);
     const radius = 5.4;
-    this.fenceGroup = new THREE.Group(); // 강풍 시 흔들림을 주도록 그룹화
+    fenceGroup = new THREE.Group(); // 강풍 시 흔들림을 주도록 그룹화
     for (let i = 0; i < 28; i++) {
         const angle = (i / 28) * Math.PI * 2;
         const x = Math.cos(angle) * radius;
@@ -174,15 +175,15 @@ function buildEnvironment() {
         fence.position.set(x, 0.1, z);
         fence.rotation.y = -angle + Math.PI / 2;
         fence.castShadow = true;
-        this.fenceGroup.add(fence);
+        fenceGroup.add(fence);
     }
-    scene.add(this.fenceGroup);
+    scene.add(fenceGroup);
 
     // 나무들
-    this.treesArray = [];
-    this.treesArray.push(createSoftTree(-3.8, 0, -2.8));
-    this.treesArray.push(createSoftTree(3.8, 0, -3.2));
-    this.treesArray.push(createSoftTree(-4.2, 0, 2.2));
+    treesArray = [];
+    treesArray.push(createSoftTree(-3.8, 0, -2.8));
+    treesArray.push(createSoftTree(3.8, 0, -3.2));
+    treesArray.push(createSoftTree(-4.2, 0, 2.2));
 }
 
 function createSoftTree(x, y, z) {
@@ -482,7 +483,7 @@ function updateWeatherVisual(weather) {
             windLeaves.visible = false;
             heatWaves.visible = false;
             // 잔디 원색 복구
-            this.groundMaterial.color.setHex(0xabebc6); 
+            if (groundMaterial) groundMaterial.color.setHex(0xabebc6); 
             // 구름 컬러 하얗게
             changeCloudsColor(0xffffff);
             break;
@@ -493,7 +494,7 @@ function updateWeatherVisual(weather) {
             windLeaves.visible = false;
             heatWaves.visible = false;
             // 빗물에 젖어 어두워진 어두운 초록 잔디 연출
-            this.groundMaterial.color.setHex(0x82c89e); 
+            if (groundMaterial) groundMaterial.color.setHex(0x82c89e); 
             // 어둡고 무거운 회색 빗구름 컬러링
             changeCloudsColor(0x627583);
             break;
@@ -503,7 +504,7 @@ function updateWeatherVisual(weather) {
             rainParticles.visible = false;
             windLeaves.visible = false;
             heatWaves.visible = true;
-            this.groundMaterial.color.setHex(0xbbe7cd); // 약간 건조해진 잔디색
+            if (groundMaterial) groundMaterial.color.setHex(0xbbe7cd); // 약간 건조해진 잔디색
             changeCloudsColor(0xfae5d3); // 피치빛 구름
             break;
             
@@ -512,7 +513,7 @@ function updateWeatherVisual(weather) {
             rainParticles.visible = false;
             windLeaves.visible = true;
             heatWaves.visible = false;
-            this.groundMaterial.color.setHex(0xabebc6);
+            if (groundMaterial) groundMaterial.color.setHex(0xabebc6);
             changeCloudsColor(0xbdc3c7);
             break;
     }
@@ -667,8 +668,8 @@ function setupEventListeners() {
     tabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
             tabs.forEach(t => t.classList.remove('active'));
-            e.target.classList.add('active');
-            renderShopItems(e.target.dataset.category);
+            e.currentTarget.classList.add('active');
+            renderShopItems(e.currentTarget.dataset.category);
         });
     });
 
@@ -776,7 +777,7 @@ function setupAuthListeners() {
     colorBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             colorBtns.forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
+            e.currentTarget.classList.add('active');
         });
     });
 
@@ -785,7 +786,7 @@ function setupAuthListeners() {
     earBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             earBtns.forEach(b => b.classList.remove('active'));
-            e.target.classList.add('active');
+            e.currentTarget.classList.add('active');
         });
     });
 
@@ -1293,17 +1294,19 @@ function animate() {
     const weather = gameState.state.currentWeather;
     if (weather === "wind") {
         // 나무 상단 잎 무더기만 바람에 쏠려 씰룩대기
-        this.treesArray.forEach((tree, idx) => {
-            const leaves = tree.userData.leavesGroup;
-            if (leaves) {
-                leaves.rotation.z = Math.sin(time * 6.5 + idx) * 0.08;
-                leaves.rotation.x = Math.cos(time * 5.0 + idx) * 0.05;
-            }
-        });
+        if (treesArray) {
+            treesArray.forEach((tree, idx) => {
+                const leaves = tree.userData.leavesGroup;
+                if (leaves) {
+                    leaves.rotation.z = Math.sin(time * 6.5 + idx) * 0.08;
+                    leaves.rotation.x = Math.cos(time * 5.0 + idx) * 0.05;
+                }
+            });
+        }
         
         // 울타리도 삐걱삐걱 가볍게 요동침
-        if (this.fenceGroup) {
-            this.fenceGroup.rotation.y = Math.sin(time * 2.0) * 0.005;
+        if (fenceGroup) {
+            fenceGroup.rotation.y = Math.sin(time * 2.0) * 0.005;
         }
 
         // 휘날리는 초록 잎사귀 파티클 이동
@@ -1323,13 +1326,15 @@ function animate() {
         }
     } else {
         // 평상시 나무 흔들림 잔잔히
-        this.treesArray.forEach((tree, idx) => {
-            const leaves = tree.userData.leavesGroup;
-            if (leaves) {
-                leaves.rotation.z = THREE.MathUtils.lerp(leaves.rotation.z, 0, deltaTime * 2);
-                leaves.rotation.x = THREE.MathUtils.lerp(leaves.rotation.x, 0, deltaTime * 2);
-            }
-        });
+        if (treesArray) {
+            treesArray.forEach((tree, idx) => {
+                const leaves = tree.userData.leavesGroup;
+                if (leaves) {
+                    leaves.rotation.z = THREE.MathUtils.lerp(leaves.rotation.z, 0, deltaTime * 2);
+                    leaves.rotation.x = THREE.MathUtils.lerp(leaves.rotation.x, 0, deltaTime * 2);
+                }
+            });
+        }
     }
 
     // 5. 폭염 아지랑이 파티클 모션 계산 (위로 조용히 아른거리며 기화)
