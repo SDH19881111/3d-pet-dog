@@ -827,7 +827,8 @@ function setupAuthListeners() {
                 errorMsg.classList.remove('hidden');
             }
         } catch (err) {
-            errorMsg.textContent = "서버 연결에 실패했습니다. (로컬 메모리 모드로 우회 시작)";
+            errorMsg.style.color = "#3182ce"; // 파란색 안내 메시지로 변경
+            errorMsg.textContent = "☁️ 로컬 환경: 오프라인 모드로 게임을 시작합니다.";
             errorMsg.classList.remove('hidden');
             
             // 오프라인/로컬 테스트 폴백 강제 시작
@@ -878,7 +879,8 @@ function setupAuthListeners() {
                 errorMsg.classList.remove('hidden');
             }
         } catch (err) {
-            errorMsg.textContent = "서버 연결에 실패했습니다. (로컬 임시 모드로 우회 가입)";
+            errorMsg.style.color = "#3182ce"; // 파란색 안내 메시지로 변경
+            errorMsg.textContent = "☁️ 로컬 환경: 오프라인 모드로 게임을 시작합니다.";
             errorMsg.classList.remove('hidden');
 
             setTimeout(() => {
