@@ -54,6 +54,7 @@ const cleanlinessFill = document.querySelector('.cleanliness-fill');
 const shopPanel = document.getElementById('shop-panel');
 const shopItemsList = document.getElementById('shop-items-list');
 const notificationEl = document.getElementById('game-notification');
+const criticalWarningEl = document.getElementById('critical-warning');
 const btnEditMode = document.getElementById('btn-edit-mode');
 const authOverlay = document.getElementById('auth-overlay');
 const uiContainer = document.getElementById('ui-container');
@@ -551,8 +552,16 @@ function changeCloudsColor(hexColor) {
     });
 }
 
+function getItemEmoji(itemId, category) {
+    const species = gameState.state.species || "dog";
+    const list = (SHOP_ITEMS[species] && SHOP_ITEMS[species][category]) || [];
+    const found = list.find(i => i.id === itemId);
+    return found ? found.emoji : "❔";
+}
+
 function addItemToScene(itemData) {
-    const itemMesh = createItemMesh(itemData.itemId);
+    const emoji = getItemEmoji(itemData.itemId, itemData.category);
+    const itemMesh = createItemMesh(itemData.itemId, emoji);
     itemMesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
     itemMesh.rotation.y = itemData.rotation;
     
@@ -687,11 +696,8 @@ function setupEventListeners() {
             return;
         }
         gameState.state.isResting = false;
-        gameState.state.cleanliness = 100;
-        gameState.emit("statsChanged", gameState.state);
-        showNotification("🧼 뽀득뽀득! 펫을 깨끗하게 씻겼습니다. 호감도가 오릅니다!");
-        gameState.gainAffinityXP(2.0);
-        showCelebrationEffect();
+        const gainedXP = gameState.wash(); // 청결도 회복은 항상, 호감도는 하루 3회 제한
+        if (gainedXP) showCelebrationEffect();
     });
 
     document.getElementById('btn-rest').addEventListener('click', () => {
@@ -787,6 +793,18 @@ function setupEventListeners() {
         syncStateTo3D();
         dog.changeState('idle');
     });
+
+    // 위기 초기화(굶주림/탈수로 처음부터 다시): 3D 전체 재동기화 + 경고 제거
+    gameState.subscribe('hardReset', () => {
+        syncStateTo3D();
+        dog.changeState('idle');
+        hideCriticalWarning('vital');
+        hideCriticalWarning('clean');
+    });
+
+    // 능력치 0 위기 경고 배너
+    gameState.subscribe('criticalWarning', (w) => showCriticalWarning(w));
+    gameState.subscribe('criticalWarningClear', (w) => hideCriticalWarning(w && w.type));
 
     // 꼬마 강아지 AI 루틴
     setInterval(handleDogAutonomy, 6500);
@@ -1258,6 +1276,32 @@ function showNotification(msg) {
     notificationTimeout = setTimeout(() => {
         notificationEl.classList.add('hidden');
     }, 3200);
+}
+
+// 능력치 0 위기 경고 배너 (vital / clean 두 종류 동시 표시 가능)
+const activeWarnings = {};
+function showCriticalWarning(w) {
+    if (!w || !criticalWarningEl) return;
+    activeWarnings[w.type] = w;
+    renderCriticalWarning();
+}
+function hideCriticalWarning(type) {
+    if (!criticalWarningEl) return;
+    if (type) delete activeWarnings[type];
+    renderCriticalWarning();
+}
+function renderCriticalWarning() {
+    if (!criticalWarningEl) return;
+    const keys = Object.keys(activeWarnings);
+    if (keys.length === 0) {
+        criticalWarningEl.classList.add('hidden');
+        criticalWarningEl.innerHTML = '';
+        return;
+    }
+    criticalWarningEl.innerHTML = keys
+        .map(k => `⚠️ ${activeWarnings[k].message} — ${activeWarnings[k].remain}초!`)
+        .join('<br>');
+    criticalWarningEl.classList.remove('hidden');
 }
 
 function createHeartsOnDog(gainedXP = true) {

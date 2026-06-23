@@ -84,8 +84,30 @@ export function createTrashMesh(trashType) {
     return group;
 }
 
-// 상점 아이템 3D 모델 생성기
-export function createItemMesh(itemId) {
+// 이모지를 3D 빌보드 스프라이트로 만드는 헬퍼 (전용 모델이 없는 아이템 표시용)
+function makeEmojiSprite(emoji) {
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    ctx.font = '96px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji || '❔', size / 2, size / 2 + 6);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.55, 0.55, 0.55);
+    return sprite;
+}
+
+// 상점 아이템 3D 모델 생성기 (전용 모델이 없으면 emoji 표지판으로 폴백)
+export function createItemMesh(itemId, emoji = '❔') {
     const group = new THREE.Group();
     
     const woodMat = new THREE.MeshStandardMaterial({ color: 0xc18c5d, roughness: 0.95 }); 
@@ -387,6 +409,19 @@ export function createItemMesh(itemId) {
         const earGeo = new THREE.SphereGeometry(0.04, 6, 6);
         const earL = new THREE.Mesh(earGeo, bearMat); earL.position.set(-0.09, 0.34, 0); group.add(earL);
         const earR = new THREE.Mesh(earGeo, bearMat); earR.position.set(0.09, 0.34, 0); group.add(earR);
+    }
+
+    // 전용 모델이 없는 아이템(고양이/햄스터 전용, 신규 레벨 6~10 등)은 받침대 + 이모지 표지판으로 표시
+    if (group.children.length === 0) {
+        const pedestalMat = new THREE.MeshStandardMaterial({ color: 0xd9c2a6, roughness: 0.95 });
+        const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.12, 16), pedestalMat);
+        pedestal.position.y = 0.06;
+        pedestal.castShadow = true;
+        group.add(pedestal);
+
+        const sprite = makeEmojiSprite(emoji);
+        sprite.position.set(0, 0.42, 0);
+        group.add(sprite);
     }
 
     group.position.set(0, 0, 0);

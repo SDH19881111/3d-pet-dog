@@ -271,23 +271,29 @@ export class ChibiPet {
         // 날렵한 다리
         this._addLegs({ x: 0.12, y: -0.1, z: 0.14, r: 0.06, len: 0.18, paw: true });
 
-        // 길고 휘어지는 꼬리
+        // 아래로 늘어지며 부드럽게 이어지는 통통한 꼬리 (TubeGeometry로 끊김 없이)
         this.tailPivot = new THREE.Group();
-        this.tailPivot.position.set(0, 0.12, -0.28);
+        this.tailPivot.position.set(0, 0.06, -0.3);
         this.body.add(this.tailPivot);
-        const seg1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.22, 6, 8), this.accentMaterial);
-        seg1.position.set(0, 0.14, -0.04);
-        seg1.rotation.x = -0.5;
-        seg1.castShadow = true;
-        this.tailPivot.add(seg1);
-        const seg2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.16, 6, 8), this.accentMaterial);
-        seg2.position.set(0, 0.18, 0.05);
-        seg2.rotation.x = 0.9;
-        seg2.castShadow = true;
-        seg1.add(seg2);
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 8), this.bellyMaterial);
-        tip.position.set(0, 0.1, 0);
-        seg2.add(tip);
+
+        const tailCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 0.06, 0.0),    // 엉덩이에서 시작
+            new THREE.Vector3(0, -0.02, -0.08), // 살짝 뒤로
+            new THREE.Vector3(0, -0.16, -0.10), // 아래로 늘어짐
+            new THREE.Vector3(0, -0.28, -0.04), // 더 아래로
+            new THREE.Vector3(0, -0.34, 0.06)   // 끝이 앞으로 살짝 말림
+        ]);
+        const tailGeo = new THREE.TubeGeometry(tailCurve, 28, 0.052, 10, false);
+        const tail = new THREE.Mesh(tailGeo, this.accentMaterial);
+        tail.castShadow = true;
+        this.tailPivot.add(tail);
+
+        // 통통하고 밝은 꼬리 끝
+        const tipPos = tailCurve.getPoint(1);
+        const tailTip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), this.bellyMaterial);
+        tailTip.position.copy(tipPos);
+        tailTip.castShadow = true;
+        this.tailPivot.add(tailTip);
     }
 
     // ===== 🐹 햄스터 =====
@@ -453,6 +459,67 @@ export class ChibiPet {
                 if(this.species === 'hamster') { glassesGroup.scale.set(0.8, 0.8, 0.8); glassesGroup.position.y = -0.05; }
                 this.head.add(glassesGroup);
                 this.equippedClothesMeshes.push(glassesGroup);
+            }
+            else if (clothesId.includes("crown")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0xf1c40f);
+                mat.metalness = 0.4;
+                mat.roughness = 0.4;
+                const crownGroup = new THREE.Group();
+                const band = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.06, 14, 1, true), mat);
+                band.position.set(0, 0.34, 0);
+                band.castShadow = true;
+                crownGroup.add(band);
+                for (let i = 0; i < 6; i++) {
+                    const a = (i / 6) * Math.PI * 2;
+                    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 6), mat);
+                    spike.position.set(Math.cos(a) * 0.13, 0.4, Math.sin(a) * 0.13);
+                    crownGroup.add(spike);
+                }
+                const gem = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.3 }));
+                gem.position.set(0, 0.36, 0.13);
+                crownGroup.add(gem);
+                if (this.species === 'hamster') { crownGroup.scale.set(0.8, 0.8, 0.8); crownGroup.position.y = -0.08; }
+                this.head.add(crownGroup);
+                this.equippedClothesMeshes.push(crownGroup);
+            }
+            else if (clothesId.includes("headphone")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0x34495e);
+                const g = new THREE.Group();
+                const band = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.022, 8, 22, Math.PI), mat);
+                band.castShadow = true;
+                g.add(band);
+                const cupGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.05, 12);
+                const cupMat = clothesMat.clone();
+                cupMat.color.setHex(0xe74c3c);
+                const cupL = new THREE.Mesh(cupGeo, cupMat); cupL.rotation.z = Math.PI / 2; cupL.position.set(-0.28, 0.0, 0.0); g.add(cupL);
+                const cupR = new THREE.Mesh(cupGeo, cupMat); cupR.rotation.z = Math.PI / 2; cupR.position.set(0.28, 0.0, 0.0); g.add(cupR);
+                if (this.species === 'hamster') { g.scale.set(0.8, 0.8, 0.8); }
+                this.head.add(g);
+                this.equippedClothesMeshes.push(g);
+            }
+            else if (clothesId.includes("wings")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0xa29bfe);
+                mat.transparent = true;
+                mat.opacity = 0.85;
+                mat.side = THREE.DoubleSide;
+                const g = new THREE.Group();
+                const wingGeo = new THREE.CircleGeometry(0.18, 14, 0, Math.PI);
+                const mkWing = (sign) => {
+                    const w = new THREE.Mesh(wingGeo, mat);
+                    w.position.set(sign * 0.1, 0.06, -0.2);
+                    w.rotation.y = sign * 0.6;
+                    w.rotation.z = sign * 0.3;
+                    w.scale.set(1, 1.4, 1);
+                    return w;
+                };
+                g.add(mkWing(-1));
+                g.add(mkWing(1));
+                if (this.species === 'hamster') { g.scale.set(0.85, 0.85, 0.85); }
+                this.body.add(g);
+                this.equippedClothesMeshes.push(g);
             }
             else if (clothesId.includes("wizard") || clothesId.includes("flower")) {
                 const mat = clothesMat.clone();

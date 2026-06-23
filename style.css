@@ -519,6 +519,36 @@ body, html {
     pointer-events: none;
 }
 
+/* 능력치 0 위기 경고 배너 */
+.critical-warning {
+    position: absolute;
+    top: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(192, 57, 43, 0.95);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 16px;
+    font-size: 1rem;
+    font-weight: 800;
+    text-align: center;
+    line-height: 1.5;
+    box-shadow: 0 6px 22px rgba(192, 57, 43, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    z-index: 150;
+    animation: criticalPulse 0.9s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.critical-warning.hidden {
+    display: none;
+}
+
+@keyframes criticalPulse {
+    0%, 100% { transform: translateX(-50%) scale(1); box-shadow: 0 6px 22px rgba(192, 57, 43, 0.5); }
+    50% { transform: translateX(-50%) scale(1.04); box-shadow: 0 8px 30px rgba(192, 57, 43, 0.8); }
+}
+
 /* Action Panel (Bottom Center) */
 .action-panel {
     display: flex;
