@@ -809,7 +809,7 @@ function setupAuthListeners() {
         const password = document.getElementById('login-pw').value;
 
         try {
-            const res = await fetch('/functions/api/login', {
+            const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username, password })
@@ -857,7 +857,7 @@ function setupAuthListeners() {
         const earType = activeEarBtn ? activeEarBtn.dataset.ear : "floppy";
 
         try {
-            const res = await fetch('/functions/api/signup', {
+            const res = await fetch('/api/signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

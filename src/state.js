@@ -152,7 +152,7 @@ class GameStateManager {
         
         this.emit("syncing", true);
         try {
-            const response = await fetch("/functions/api/save", {
+            const response = await fetch("/api/save", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
