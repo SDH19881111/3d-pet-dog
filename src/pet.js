@@ -7,7 +7,7 @@ export class ChibiPet {
         this.group = new THREE.Group();
         this.scene.add(this.group);
         this.species = gameState.state.species || "dog";
-        
+
         // 상태 설정
         this.state = 'idle'; // 'idle', 'walk', 'eat', 'pet', 'sleep', 'walk_action'
         this.stateTimer = 0;
@@ -15,10 +15,10 @@ export class ChibiPet {
         this.velocity = new THREE.Vector3();
         this.walkSpeed = 1.8;
         this.equippedClothesMeshes = [];
-        
+
         // 3D 모델 빌드
         this.buildModel();
-        
+
         // 커스터마이징 적용
         this.updateCustomization();
 
@@ -28,242 +28,342 @@ export class ChibiPet {
         this.group.receiveShadow = true;
     }
 
-    // 몽실몽실한 솜사탕/클레이 질감의 3D 캐릭터 빌드
+    // ===== 공용 머티리얼 + 종족별 빌더 디스패치 =====
     buildModel() {
-        // 인스턴스 멤버로 털 머티리얼 저장 (커스터마이징 실시간 변경 지원)
-        this.furMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xffcc80, 
-            roughness: 0.95, 
-            metalness: 0.0 
-        }); 
+        // 커스터마이징으로 실시간 변경되는 털 머티리얼 (인스턴스 보관)
+        this.furMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc80, roughness: 0.9, metalness: 0.0 });
+        // 배/주둥이/볼/발바닥 등 밝은 대조색
+        this.bellyMaterial = new THREE.MeshStandardMaterial({ color: 0xfff9e6, roughness: 0.95, metalness: 0.0 });
+        // 귀끝/꼬리 등 어두운 강조색
+        this.accentMaterial = new THREE.MeshStandardMaterial({ color: 0xe67e22, roughness: 0.9, metalness: 0.0 });
+        this.eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.3, metalness: 0.1 }); // 초코칩 눈
+        this.shineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // 눈 하이라이트(반짝)
+        this.noseMaterial = new THREE.MeshStandardMaterial({ color: 0x1a252f, roughness: 0.6, metalness: 0.1 });
+        this.pinkMaterial = new THREE.MeshStandardMaterial({ color: 0xff9aa8, roughness: 0.8, metalness: 0.0 }); // 코/귀 안쪽 핑크
+        this.tongueMaterial = new THREE.MeshStandardMaterial({ color: 0xff8a9e, roughness: 0.8, metalness: 0.0 });
 
-        const bellyMaterial = new THREE.MeshStandardMaterial({ color: 0xfff9e6, roughness: 0.95, metalness: 0.0 }); // 크림 아이보리 배털
-        const earMaterial = new THREE.MeshStandardMaterial({ color: 0xe67e22, roughness: 0.95, metalness: 0.0 }); // 귀끝 대조용 어두운 색
-        const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.5, metalness: 0.1 }); // 초코칩 눈
-        const noseMaterial = new THREE.MeshStandardMaterial({ color: 0x1a252f, roughness: 0.8, metalness: 0.1 });
-        const tongueMaterial = new THREE.MeshStandardMaterial({ color: 0xff8a9e, roughness: 0.8, metalness: 0.0 }); // 핑크 혀
-
-        // 1. 몸통 (Body) - 캡슐 가로 눕히기 (종족별 차이 적용)
-        if (this.species === 'hamster') {
-            const bodyGeo = new THREE.SphereGeometry(0.28, 16, 16);
-            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
-            this.body.position.set(0, 0, 0);
-        } else if (this.species === 'cat') {
-            const bodyGeo = new THREE.CapsuleGeometry(0.22, 0.3, 8, 16);
-            bodyGeo.rotateX(Math.PI / 2);
-            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
-            this.body.position.set(0, 0, 0);
-        } else {
-            const bodyGeo = new THREE.CapsuleGeometry(0.25, 0.32, 8, 16);
-            bodyGeo.rotateX(Math.PI / 2); 
-            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
-            this.body.position.set(0, 0, 0);
-        }
-        
-        this.body.castShadow = true;
-        this.body.receiveShadow = true;
+        // 모든 신체 파트를 담는 컨테이너(애니메이션이 this.body 기준으로 동작)
+        this.body = new THREE.Group();
         this.group.add(this.body);
 
-        // 배 부분의 크림색 패널
-        const belly = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 12), bellyMaterial);
-        belly.scale.set(0.9, 0.6, 0.9);
-        belly.position.set(0, -0.08, 0.08);
-        this.body.add(belly);
+        if (this.species === 'cat') this._buildCat();
+        else if (this.species === 'hamster') this._buildHamster();
+        else this._buildDog();
+    }
 
-        // 2. 머리 피벗 및 머리 구체
-        this.headPivot = new THREE.Group();
-        if (this.species === 'hamster') {
-            this.headPivot.position.set(0, 0.1, 0.15); 
-        } else {
-            this.headPivot.position.set(0, 0.15, 0.2); 
-        }
-        this.body.add(this.headPivot); 
+    // ===== 공용 헬퍼들 =====
 
-        const headGeo = new THREE.SphereGeometry(0.3, 16, 16);
-        this.head = new THREE.Mesh(headGeo, this.furMaterial);
-        this.head.position.set(0, 0.14, 0.08); 
-        this.head.castShadow = true;
-        this.headPivot.add(this.head);
+    // 눈(뜬 눈 + 하이라이트 + 감은 눈) 생성
+    _addEyes(p) {
+        const eyeGeo = new THREE.SphereGeometry(p.size, 12, 12);
+        const shineGeo = new THREE.SphereGeometry(p.size * 0.35, 8, 8);
+        const mk = (sign) => {
+            const eye = new THREE.Mesh(eyeGeo, this.eyeMaterial);
+            eye.position.set(sign * p.x, p.y, p.z);
+            eye.scale.set(p.sx || 1, p.sy || 1, p.sz || 0.6);
+            const shine = new THREE.Mesh(shineGeo, this.shineMaterial);
+            shine.position.set(-sign * p.size * 0.3, p.size * 0.4, p.size * 0.95);
+            eye.add(shine);
+            this.head.add(eye);
+            return eye;
+        };
+        this.leftEye = mk(-1);
+        this.rightEye = mk(1);
 
-        // 뺨 패치
-        const cheekGeo = new THREE.SphereGeometry(0.1, 10, 10);
-        const cheekL = new THREE.Mesh(cheekGeo, bellyMaterial);
-        cheekL.position.set(-0.14, -0.06, 0.18);
-        cheekL.scale.set(1.2, 0.8, 1);
-        const cheekR = new THREE.Mesh(cheekGeo, bellyMaterial);
-        cheekR.position.set(0.14, -0.06, 0.18);
-        cheekR.scale.set(1.2, 0.8, 1);
-        this.head.add(cheekL);
-        this.head.add(cheekR);
+        const closedGeo = new THREE.TorusGeometry(p.size, p.size * 0.2, 4, 8, Math.PI);
+        const mkc = (sign) => {
+            const c = new THREE.Mesh(closedGeo, this.accentMaterial);
+            c.position.set(sign * p.x, p.y, p.z);
+            c.rotation.x = Math.PI;
+            c.visible = false;
+            this.head.add(c);
+            return c;
+        };
+        this.leftClosedEye = mkc(-1);
+        this.rightClosedEye = mkc(1);
+    }
 
-        // 주둥이 및 코 (종족별 차이 적용)
-        if (this.species === 'hamster') {
-            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), noseMaterial);
-            nose.position.set(0, -0.02, 0.28);
-            this.head.add(nose);
-            this.snout = new THREE.Group(); // dummy
-        } else if (this.species === 'cat') {
-            const snoutGeo = new THREE.CapsuleGeometry(0.08, 0.04, 6, 10);
-            snoutGeo.rotateX(Math.PI / 2);
-            this.snout = new THREE.Mesh(snoutGeo, bellyMaterial);
-            this.snout.position.set(0, -0.04, 0.25);
-            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), noseMaterial);
-            nose.position.set(0, 0.04, 0.06);
-            this.snout.add(nose);
-            this.head.add(this.snout);
-        } else {
-            const snoutGeo = new THREE.CapsuleGeometry(0.1, 0.06, 6, 10);
-            snoutGeo.rotateX(Math.PI / 2);
-            this.snout = new THREE.Mesh(snoutGeo, bellyMaterial);
-            this.snout.position.set(0, -0.04, 0.22);
-            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), noseMaterial);
-            nose.position.set(0, 0.05, 0.06);
-            this.snout.add(nose);
-            this.head.add(this.snout);
-        }
+    // 처진 귀(Floppy) 피벗 생성 -> leftEarPivot / rightEarPivot
+    _addFloppyEars(p) {
+        const geo = new THREE.CapsuleGeometry(p.r, p.len, 6, 12);
+        const mk = (sign) => {
+            const pivot = new THREE.Group();
+            pivot.position.set(sign * p.x, p.y, p.z);
+            this.head.add(pivot);
+            const ear = new THREE.Mesh(geo, this.accentMaterial);
+            ear.position.set(0, -p.len / 2, 0);
+            ear.scale.set(p.sx, p.sy, p.sz);
+            ear.castShadow = true;
+            pivot.add(ear);
+            return pivot;
+        };
+        this.leftEarPivot = mk(-1);
+        this.rightEarPivot = mk(1);
+    }
 
-        // 눈
-        const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
-        this.leftEye = new THREE.Mesh(eyeGeo, eyeMaterial);
-        this.leftEye.position.set(-0.15, 0.08, 0.22);
-        this.leftEye.scale.z = 0.5; 
-        
-        this.rightEye = new THREE.Mesh(eyeGeo, eyeMaterial);
-        this.rightEye.position.set(0.15, 0.08, 0.22);
-        this.rightEye.scale.z = 0.5;
-        
-        this.head.add(this.leftEye);
-        this.head.add(this.rightEye);
+    // 쫑긋 선 귀(Pointy) 피벗 생성 -> leftPointyPivot / rightPointyPivot
+    _addPointyEars(p) {
+        const geo = new THREE.ConeGeometry(p.r, p.len, p.seg || 7);
+        const mk = (sign) => {
+            const pivot = new THREE.Group();
+            pivot.position.set(sign * p.x, p.y, p.z);
+            this.head.add(pivot);
+            const ear = new THREE.Mesh(geo, this.accentMaterial);
+            ear.position.set(0, p.len * 0.35, 0);
+            ear.rotation.z = sign * (p.tilt || 0);
+            ear.scale.set(p.sx || 1, p.sy || 1, p.sz || 0.6);
+            ear.castShadow = true;
+            pivot.add(ear);
+            if (p.inner) {
+                const inner = new THREE.Mesh(new THREE.ConeGeometry(p.r * 0.5, p.len * 0.65, p.seg || 7), this.pinkMaterial);
+                inner.position.set(0, -p.len * 0.04, p.r * 0.55);
+                ear.add(inner);
+            }
+            return pivot;
+        };
+        this.leftPointyPivot = mk(-1);
+        this.rightPointyPivot = mk(1);
+    }
 
-        // 감은 눈
-        const closedEyeGeo = new THREE.TorusGeometry(0.04, 0.01, 4, 8, Math.PI);
-        this.leftClosedEye = new THREE.Mesh(closedEyeGeo, earMaterial);
-        this.leftClosedEye.position.set(-0.15, 0.08, 0.22);
-        this.leftClosedEye.rotation.x = Math.PI; 
-        this.leftClosedEye.visible = false;
+    // 다리 4개 + 발바닥
+    _addLegs(p) {
+        const geo = new THREE.CapsuleGeometry(p.r, p.len, 6, 10);
+        const mk = (sx, sz) => {
+            const pivot = new THREE.Group();
+            pivot.position.set(sx * p.x, p.y, sz * p.z);
+            this.body.add(pivot);
+            const mesh = new THREE.Mesh(geo, this.furMaterial);
+            mesh.position.set(0, -p.len / 2, 0);
+            mesh.castShadow = true;
+            pivot.add(mesh);
+            if (p.paw) {
+                const paw = new THREE.Mesh(new THREE.SphereGeometry(p.r * 1.05, 8, 8), this.bellyMaterial);
+                paw.position.set(0, -p.len - p.r * 0.3, p.r * 0.2);
+                paw.scale.set(1, 0.7, 1.25);
+                pivot.add(paw);
+            }
+            return pivot;
+        };
+        this.legFL = mk(-1, 1);
+        this.legFR = mk(1, 1);
+        this.legBL = mk(-1, -1);
+        this.legBR = mk(1, -1);
+    }
 
-        this.rightClosedEye = new THREE.Mesh(closedEyeGeo, earMaterial);
-        this.rightClosedEye.position.set(0.15, 0.08, 0.22);
-        this.rightClosedEye.rotation.x = Math.PI;
-        this.rightClosedEye.visible = false;
-
-        this.head.add(this.leftClosedEye);
-        this.head.add(this.rightClosedEye);
-
-        // --- 귀 타입 1: 🐾 처진 귀 (Floppy Ears) ---
-        const earFloppyGeo = new THREE.CapsuleGeometry(0.07, 0.16, 6, 12);
-        
-        this.leftEarPivot = new THREE.Group();
-        this.leftEarPivot.position.set(-0.25, 0.08, 0.0);
-        this.head.add(this.leftEarPivot);
-        const earL = new THREE.Mesh(earFloppyGeo, earMaterial);
-        earL.position.set(0, -0.08, 0); 
-        earL.scale.set(0.8, 1, 1.3); 
-        earL.castShadow = true;
-        this.leftEarPivot.add(earL);
-
-        this.rightEarPivot = new THREE.Group();
-        this.rightEarPivot.position.set(0.25, 0.08, 0.0);
-        this.head.add(this.rightEarPivot);
-        const earR = new THREE.Mesh(earFloppyGeo, earMaterial);
-        earR.position.set(0, -0.08, 0);
-        earR.scale.set(0.8, 1, 1.3);
-        earR.castShadow = true;
-        this.rightEarPivot.add(earR);
-
-        // --- 귀 타입 2: 🦊 쫑긋 선 귀 (Pointy Ears) ---
-        const earPointyGeo = new THREE.ConeGeometry(0.09, 0.2, 6);
-        earPointyGeo.rotateX(Math.PI / 2); // 정렬
-        
-        this.leftPointyPivot = new THREE.Group();
-        this.leftPointyPivot.position.set(-0.22, 0.22, 0.0);
-        this.head.add(this.leftPointyPivot);
-        const pointyL = new THREE.Mesh(earPointyGeo, earMaterial);
-        pointyL.position.set(0, 0.08, 0);
-        pointyL.rotation.set(-Math.PI / 2, 0, -0.25); // 위로 솟고 약간 밖으로 뻗음
-        pointyL.scale.set(1.0, 1.0, 0.7); // 납작하게 성형
-        pointyL.castShadow = true;
-        this.leftPointyPivot.add(pointyL);
-
-        this.rightPointyPivot = new THREE.Group();
-        this.rightPointyPivot.position.set(0.22, 0.22, 0.0);
-        this.head.add(this.rightPointyPivot);
-        const pointyR = new THREE.Mesh(earPointyGeo, earMaterial);
-        pointyR.position.set(0, 0.08, 0);
-        pointyR.rotation.set(-Math.PI / 2, 0, 0.25);
-        pointyR.scale.set(1.0, 1.0, 0.7);
-        pointyR.castShadow = true;
-        this.rightPointyPivot.add(pointyR);
-
-        // 혀 (Tongue)
-        const tongueGeo = new THREE.BoxGeometry(0.09, 0.02, 0.1);
-        this.tongue = new THREE.Mesh(tongueGeo, tongueMaterial);
-        this.tongue.position.set(0, -0.12, 0.15);
+    _addTongue(p) {
+        this.tongue = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.1), this.tongueMaterial);
+        this.tongue.position.set(p.x || 0, p.y, p.z);
         this.tongue.rotation.x = 0.2;
         this.tongue.visible = false;
         this.head.add(this.tongue);
+    }
 
-        // 3. 다리 4개 피벗 및 다리
-        const legGeo = new THREE.CapsuleGeometry(0.07, 0.14, 6, 10);
+    // 고양이 수염
+    _addWhiskers() {
+        const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
+        const geo = new THREE.CylinderGeometry(0.004, 0.004, 0.2, 4);
+        geo.rotateZ(Math.PI / 2);
+        const rows = [0.025, 0.0, -0.025];
+        [-1, 1].forEach((sign) => {
+            rows.forEach((dy) => {
+                const w = new THREE.Mesh(geo, mat);
+                w.position.set(sign * 0.16, -0.03 + dy, 0.18);
+                w.rotation.y = sign * 0.35;
+                w.rotation.z = dy * 4;
+                this.head.add(w);
+            });
+        });
+    }
 
-        this.legFL = new THREE.Group();
-        this.legFL.position.set(-0.15, -0.15, 0.18);
-        this.body.add(this.legFL);
-        const meshFL = new THREE.Mesh(legGeo, this.furMaterial);
-        meshFL.position.set(0, -0.07, 0); 
-        meshFL.castShadow = true;
-        this.legFL.add(meshFL);
+    // ===== 🐶 강아지 =====
+    _buildDog() {
+        const bodyGeo = new THREE.CapsuleGeometry(0.25, 0.34, 8, 16);
+        bodyGeo.rotateX(Math.PI / 2);
+        const bodyMesh = new THREE.Mesh(bodyGeo, this.furMaterial);
+        bodyMesh.castShadow = true;
+        bodyMesh.receiveShadow = true;
+        this.body.add(bodyMesh);
 
-        this.legFR = new THREE.Group();
-        this.legFR.position.set(0.15, -0.15, 0.18);
-        this.body.add(this.legFR);
-        const meshFR = new THREE.Mesh(legGeo, this.furMaterial);
-        meshFR.position.set(0, -0.07, 0);
-        meshFR.castShadow = true;
-        this.legFR.add(meshFR);
+        const belly = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), this.bellyMaterial);
+        belly.scale.set(0.82, 0.6, 1.0);
+        belly.position.set(0, -0.1, 0.05);
+        this.body.add(belly);
 
-        this.legBL = new THREE.Group();
-        this.legBL.position.set(-0.15, -0.15, -0.18);
-        this.body.add(this.legBL);
-        const meshBL = new THREE.Mesh(legGeo, this.furMaterial);
-        meshBL.position.set(0, -0.07, 0);
-        meshBL.castShadow = true;
-        this.legBL.add(meshBL);
+        // 머리
+        this.headPivot = new THREE.Group();
+        this.headPivot.position.set(0, 0.18, 0.24);
+        this.body.add(this.headPivot);
 
-        this.legBR = new THREE.Group();
-        this.legBR.position.set(0.15, -0.15, -0.18);
-        this.body.add(this.legBR);
-        const meshBR = new THREE.Mesh(legGeo, this.furMaterial);
-        meshBR.position.set(0, -0.07, 0);
-        meshBR.castShadow = true;
-        this.legBR.add(meshBR);
+        this.head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 16, 16), this.furMaterial);
+        this.head.position.set(0, 0.12, 0.04);
+        this.head.castShadow = true;
+        this.headPivot.add(this.head);
 
-        // 4. 꼬리 피벗 및 꼬리
+        // 긴 주둥이 + 코
+        const snoutGeo = new THREE.CapsuleGeometry(0.1, 0.08, 6, 10);
+        snoutGeo.rotateX(Math.PI / 2);
+        this.snout = new THREE.Mesh(snoutGeo, this.bellyMaterial);
+        this.snout.position.set(0, -0.05, 0.21);
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), this.noseMaterial);
+        nose.position.set(0, 0.05, 0.09);
+        this.snout.add(nose);
+        this.head.add(this.snout);
+
+        this._addEyes({ x: 0.13, y: 0.08, z: 0.21, size: 0.045, sz: 0.6 });
+        // 강아지: 처진 귀 / 쫑긋 귀 둘 다 어울림
+        this._addFloppyEars({ x: 0.22, y: 0.06, z: 0.02, r: 0.075, len: 0.18, sx: 0.8, sy: 1, sz: 1.3 });
+        this._addPointyEars({ x: 0.16, y: 0.2, z: 0.02, r: 0.1, len: 0.22, tilt: 0.25, sx: 1, sy: 1, sz: 0.55 });
+        this._addTongue({ y: -0.13, z: 0.18 });
+        this._addLegs({ x: 0.15, y: -0.12, z: 0.16, r: 0.075, len: 0.16, paw: true });
+
+        // 흔드는 꼬리
         this.tailPivot = new THREE.Group();
-        this.tailPivot.position.set(0, 0.1, -0.26); 
+        this.tailPivot.position.set(0, 0.1, -0.28);
         this.body.add(this.tailPivot);
+        const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 4, 8), this.accentMaterial);
+        tail.position.set(0, 0.1, -0.04);
+        tail.rotation.x = Math.PI / 4;
+        tail.castShadow = true;
+        this.tailPivot.add(tail);
+    }
 
-        if (this.species === 'cat') {
-            const tailGeo = new THREE.CapsuleGeometry(0.03, 0.3, 4, 8);
-            const tail = new THREE.Mesh(tailGeo, earMaterial);
-            tail.position.set(0, 0.15, -0.1); 
-            tail.rotation.x = Math.PI / 6;
-            tail.castShadow = true;
-            this.tailPivot.add(tail);
-        } else if (this.species === 'dog') {
-            const tailGeo = new THREE.CapsuleGeometry(0.04, 0.14, 4, 8);
-            const tail = new THREE.Mesh(tailGeo, earMaterial);
-            tail.position.set(0, 0.08, -0.06); 
-            tail.rotation.x = Math.PI / 4; 
-            tail.castShadow = true;
-            this.tailPivot.add(tail);
-        } // 햄스터는 꼬리 없음
+    // ===== 🐱 고양이 =====
+    _buildCat() {
+        const bodyGeo = new THREE.CapsuleGeometry(0.2, 0.34, 8, 16);
+        bodyGeo.rotateX(Math.PI / 2);
+        const bodyMesh = new THREE.Mesh(bodyGeo, this.furMaterial);
+        bodyMesh.castShadow = true;
+        bodyMesh.receiveShadow = true;
+        this.body.add(bodyMesh);
+
+        const belly = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 12), this.bellyMaterial);
+        belly.scale.set(0.8, 0.6, 1.0);
+        belly.position.set(0, -0.08, 0.05);
+        this.body.add(belly);
+
+        // 머리(약간 납작한 둥근 얼굴)
+        this.headPivot = new THREE.Group();
+        this.headPivot.position.set(0, 0.2, 0.22);
+        this.body.add(this.headPivot);
+
+        this.head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 16), this.furMaterial);
+        this.head.scale.set(1.05, 0.95, 1.0);
+        this.head.position.set(0, 0.1, 0.02);
+        this.head.castShadow = true;
+        this.headPivot.add(this.head);
+
+        // 작은 주둥이 + 핑크 코
+        this.snout = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), this.bellyMaterial);
+        this.snout.scale.set(1.1, 0.8, 0.85);
+        this.snout.position.set(0, -0.07, 0.2);
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), this.pinkMaterial);
+        nose.position.set(0, 0.03, 0.07);
+        this.snout.add(nose);
+        this.head.add(this.snout);
+
+        // 고양이 눈: 세로로 살짝 긴 아몬드형
+        this._addEyes({ x: 0.11, y: 0.06, z: 0.19, size: 0.05, sy: 1.2, sz: 0.5 });
+        // 고양이: 쫑긋 귀(핑크 안쪽) 강조, 처진 귀는 작게 fallback
+        this._addPointyEars({ x: 0.13, y: 0.19, z: 0.0, r: 0.1, len: 0.24, tilt: 0.18, sx: 1, sy: 1, sz: 0.5, inner: true });
+        this._addFloppyEars({ x: 0.18, y: 0.12, z: 0.0, r: 0.06, len: 0.12, sx: 0.9, sy: 1, sz: 1.2 });
+        this._addWhiskers();
+        this._addTongue({ y: -0.12, z: 0.16 });
+        // 날렵한 다리
+        this._addLegs({ x: 0.12, y: -0.1, z: 0.14, r: 0.06, len: 0.18, paw: true });
+
+        // 길고 휘어지는 꼬리
+        this.tailPivot = new THREE.Group();
+        this.tailPivot.position.set(0, 0.12, -0.28);
+        this.body.add(this.tailPivot);
+        const seg1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.22, 6, 8), this.accentMaterial);
+        seg1.position.set(0, 0.14, -0.04);
+        seg1.rotation.x = -0.5;
+        seg1.castShadow = true;
+        this.tailPivot.add(seg1);
+        const seg2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.16, 6, 8), this.accentMaterial);
+        seg2.position.set(0, 0.18, 0.05);
+        seg2.rotation.x = 0.9;
+        seg2.castShadow = true;
+        seg1.add(seg2);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 8), this.bellyMaterial);
+        tip.position.set(0, 0.1, 0);
+        seg2.add(tip);
+    }
+
+    // ===== 🐹 햄스터 =====
+    _buildHamster() {
+        // 동글동글 큰 몸 (지면에 닿도록 살짝 내려 배치)
+        const bodyMesh = new THREE.Mesh(new THREE.SphereGeometry(0.33, 18, 18), this.furMaterial);
+        bodyMesh.scale.set(1.0, 0.95, 1.05);
+        bodyMesh.position.set(0, -0.02, 0);
+        bodyMesh.castShadow = true;
+        bodyMesh.receiveShadow = true;
+        this.body.add(bodyMesh);
+
+        const belly = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 14), this.bellyMaterial);
+        belly.scale.set(0.7, 0.85, 0.55);
+        belly.position.set(0, -0.05, 0.2);
+        this.body.add(belly);
+
+        // 몸에 거의 붙은 머리
+        this.headPivot = new THREE.Group();
+        this.headPivot.position.set(0, 0.16, 0.16);
+        this.body.add(this.headPivot);
+
+        this.head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 16), this.furMaterial);
+        this.head.scale.set(1.1, 0.95, 1.0);
+        this.head.position.set(0, 0.02, 0.06);
+        this.head.castShadow = true;
+        this.headPivot.add(this.head);
+
+        // 통통한 볼주머니
+        const cheekGeo = new THREE.SphereGeometry(0.13, 12, 12);
+        const cheekL = new THREE.Mesh(cheekGeo, this.bellyMaterial);
+        cheekL.position.set(-0.15, -0.08, 0.1);
+        cheekL.scale.set(1.0, 0.95, 0.95);
+        const cheekR = new THREE.Mesh(cheekGeo, this.bellyMaterial);
+        cheekR.position.set(0.15, -0.08, 0.1);
+        cheekR.scale.set(1.0, 0.95, 0.95);
+        this.head.add(cheekL, cheekR);
+
+        // 작은 핑크 코 + 앞니
+        this.snout = new THREE.Group(); // 의미상 유지(애니메이션은 미사용)
+        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), this.pinkMaterial);
+        nose.position.set(0, -0.03, 0.21);
+        this.head.add(nose);
+        const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.01), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }));
+        teeth.position.set(0, -0.08, 0.2);
+        this.head.add(teeth);
+
+        // 가깝게 붙은 까만 눈
+        this._addEyes({ x: 0.09, y: 0.02, z: 0.18, size: 0.04, sz: 0.7 });
+        // 작고 동그란 귀 (처진=작은 둥근, 쫑긋=짧은 라운드)
+        this._addFloppyEars({ x: 0.13, y: 0.16, z: -0.02, r: 0.06, len: 0.02, sx: 1, sy: 1, sz: 1 });
+        this._addPointyEars({ x: 0.12, y: 0.17, z: -0.02, r: 0.07, len: 0.09, tilt: 0.1, sx: 1, sy: 0.8, sz: 0.8 });
+        this._addTongue({ y: -0.1, z: 0.16 });
+        // 아주 짧은 다리(둥근 몸 아래로 살짝)
+        this._addLegs({ x: 0.13, y: -0.18, z: 0.1, r: 0.05, len: 0.05, paw: true });
+
+        // 앞발(작은 손)
+        const handGeo = new THREE.SphereGeometry(0.05, 8, 8);
+        const handL = new THREE.Mesh(handGeo, this.bellyMaterial);
+        handL.position.set(-0.1, -0.12, 0.26);
+        const handR = new THREE.Mesh(handGeo, this.bellyMaterial);
+        handR.position.set(0.1, -0.12, 0.26);
+        this.body.add(handL, handR);
+
+        // 꼬리는 없지만 애니메이션 안전을 위해 피벗 유지(작은 뭉툭 꼬리)
+        this.tailPivot = new THREE.Group();
+        this.tailPivot.position.set(0, 0.05, -0.3);
+        this.body.add(this.tailPivot);
+        const nub = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), this.bellyMaterial);
+        this.tailPivot.add(nub);
     }
 
     // 커스터마이징 정보 동기화 (색상 및 귀 타입)
     updateCustomization() {
         const state = gameState.state;
-        
+
         // 털 색상 갱신
         if (state.furColor) {
             this.furMaterial.color.set(state.furColor);
@@ -271,7 +371,7 @@ export class ChibiPet {
 
         // 귀 형태 노출 조절
         const isFloppy = state.earType === "floppy";
-        
+
         this.leftEarPivot.visible = isFloppy;
         this.rightEarPivot.visible = isFloppy;
 
@@ -297,13 +397,13 @@ export class ChibiPet {
                 mat.color.setHex(0xe74c3c);
                 const scarfGeo = new THREE.TorusGeometry(0.24, 0.04, 8, 16);
                 const scarf = new THREE.Mesh(scarfGeo, mat);
-                scarf.position.set(0, 0.08, 0.16); 
+                scarf.position.set(0, 0.08, 0.16);
                 scarf.rotation.x = Math.PI / 3;
                 if(this.species === 'hamster') { scarf.scale.set(1.2, 1.2, 1.2); scarf.position.y = 0.0; }
                 scarf.castShadow = true;
                 this.body.add(scarf);
                 this.equippedClothesMeshes.push(scarf);
-            } 
+            }
             else if (clothesId.includes("hat")) {
                 const mat = clothesMat.clone();
                 mat.color.setHex(0x9b59b6);
@@ -319,7 +419,7 @@ export class ChibiPet {
                 hat.add(pom);
                 this.head.add(hatGroup);
                 this.equippedClothesMeshes.push(hatGroup);
-            } 
+            }
             else if (clothesId.includes("shirt") || clothesId.includes("cape")) {
                 const mat = clothesMat.clone();
                 mat.color.setHex(0x2ecc71);
@@ -331,7 +431,7 @@ export class ChibiPet {
                 shirt.castShadow = true;
                 this.body.add(shirt);
                 this.equippedClothesMeshes.push(shirt);
-            } 
+            }
             else if (clothesId.includes("glasses")) {
                 const mat = clothesMat.clone();
                 const glassesGroup = new THREE.Group();
@@ -353,7 +453,7 @@ export class ChibiPet {
                 if(this.species === 'hamster') { glassesGroup.scale.set(0.8, 0.8, 0.8); glassesGroup.position.y = -0.05; }
                 this.head.add(glassesGroup);
                 this.equippedClothesMeshes.push(glassesGroup);
-            } 
+            }
             else if (clothesId.includes("wizard") || clothesId.includes("flower")) {
                 const mat = clothesMat.clone();
                 mat.color.setHex(0x2c3e50);
@@ -392,13 +492,13 @@ export class ChibiPet {
             this.targetPosition.copy(targetPos);
             this.targetPosition.y = this.group.position.y;
             this.walkSpeed = (newState === 'walk_action') ? 2.5 : 1.6;
-        } 
+        }
         else if (newState === 'sleep') {
             this.leftEye.visible = false;
             this.rightEye.visible = false;
             this.leftClosedEye.visible = true;
             this.rightClosedEye.visible = true;
-        } 
+        }
         else if (newState === 'pet') {
             this.tongue.visible = true;
         }
@@ -438,10 +538,10 @@ export class ChibiPet {
         if (this.state === 'idle') {
             const breathe = Math.sin(time * 3.0) * 0.025;
             this.body.scale.set(1 + breathe, 1 + breathe, 1 + breathe);
-            
+
             // 꼬리 흔들기
             this.tailPivot.rotation.y = Math.sin(time * 4) * 0.3;
-            
+
             // 귀 흔들기 (귀 형태에 맞춰 분기 애니메이션)
             const isFloppy = gameState.state.earType === "floppy";
             if (isFloppy) {
@@ -453,10 +553,10 @@ export class ChibiPet {
                 this.rightPointyPivot.rotation.z = (Math.sin(time * 0.6) > 0.9) ? -Math.sin(time * 25) * 0.08 : 0;
             }
             this.headPivot.rotation.y = Math.sin(time * 0.8) * 0.08;
-        } 
+        }
         else if (this.state === 'walk' || this.state === 'walk_action') {
             const speedFactor = (this.state === 'walk_action') ? 16 : 10;
-            
+
             const swing = Math.sin(time * speedFactor) * 0.6;
             this.legFL.rotation.x = swing;
             this.legFR.rotation.x = -swing;
@@ -475,11 +575,11 @@ export class ChibiPet {
                 this.leftPointyPivot.rotation.z = -0.05 + Math.sin(time * speedFactor) * 0.03;
                 this.rightPointyPivot.rotation.z = 0.05 - Math.sin(time * speedFactor) * 0.03;
             }
-        } 
+        }
         else if (this.state === 'pet') {
             this.body.position.y = Math.abs(Math.sin(time * 16)) * 0.3;
             this.tailPivot.rotation.y = Math.sin(time * 35) * 0.8;
-            
+
             const isFloppy = gameState.state.earType === "floppy";
             if (isFloppy) {
                 this.leftEarPivot.rotation.z = 0.3 + Math.sin(time * 15) * 0.08;
@@ -492,11 +592,11 @@ export class ChibiPet {
             if (this.stateTimer > 2.5) {
                 this.changeState('idle');
             }
-        } 
+        }
         else if (this.state === 'sleep') {
             this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, 0.15, deltaTime * 5);
             this.body.position.y = 0;
-            
+
             const foldAngle = Math.PI / 2.3;
             this.legFL.rotation.x = THREE.MathUtils.lerp(this.legFL.rotation.x, -foldAngle, deltaTime * 5);
             this.legFR.rotation.x = THREE.MathUtils.lerp(this.legFR.rotation.x, -foldAngle, deltaTime * 5);
@@ -504,7 +604,7 @@ export class ChibiPet {
             this.legBR.rotation.x = THREE.MathUtils.lerp(this.legBR.rotation.x, foldAngle, deltaTime * 5);
 
             this.headPivot.rotation.x = THREE.MathUtils.lerp(this.headPivot.rotation.x, 0.25, deltaTime * 5);
-            
+
             // 귀 내려놓기
             const isFloppy = gameState.state.earType === "floppy";
             if (isFloppy) {
@@ -520,7 +620,7 @@ export class ChibiPet {
 
             const sleepBreathe = Math.sin(time * 1.5) * 0.015;
             this.body.scale.set(1 + sleepBreathe, 1 + sleepBreathe, 1 + sleepBreathe);
-        } 
+        }
         else if (this.state === 'eat') {
             this.headPivot.rotation.x = 0.4 + Math.sin(time * 16) * 0.15;
             this.tailPivot.rotation.y = Math.sin(time * 12) * 0.4;
@@ -537,7 +637,7 @@ export class ChibiPet {
         // 수면 상태 외 복구
         if (this.state !== 'sleep') {
             this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, 0.35, deltaTime * 5);
-            
+
             if (this.state !== 'walk' && this.state !== 'walk_action' && this.state !== 'eat') {
                 this.legFL.rotation.x = THREE.MathUtils.lerp(this.legFL.rotation.x, 0, deltaTime * 5);
                 this.legFR.rotation.x = THREE.MathUtils.lerp(this.legFR.rotation.x, 0, deltaTime * 5);
