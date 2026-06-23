@@ -20,18 +20,94 @@
     </script>
 </head>
 <body>
+    <!-- 로그인 및 커스터마이징 오버레이 스크린 -->
+    <div id="auth-overlay" class="auth-overlay">
+        <div class="auth-card glass-panel">
+            <div class="auth-header">
+                <h2>🐶 마이 리틀 퍼피</h2>
+                <p>강아지를 클라우드에서 안전하게 키우세요!</p>
+            </div>
+            
+            <!-- 로그인/가입 탭 토글 -->
+            <div class="auth-tabs">
+                <button id="tab-login" class="auth-tab-btn active">로그인</button>
+                <button id="tab-signup" class="auth-tab-btn">회원가입</button>
+            </div>
+
+            <!-- 로그인 폼 -->
+            <form id="form-login" class="auth-form">
+                <div class="input-group">
+                    <label for="login-id">아이디</label>
+                    <input type="text" id="login-id" placeholder="아이디를 입력하세요" required>
+                </div>
+                <div class="input-group">
+                    <label for="login-pw">비밀번호</label>
+                    <input type="password" id="login-pw" placeholder="비밀번호를 입력하세요" required>
+                </div>
+                <button type="submit" class="submit-btn">로그인 후 시작하기</button>
+            </form>
+
+            <!-- 회원가입 + 강아지 커스터마이징 폼 -->
+            <form id="form-signup" class="auth-form hidden">
+                <div class="input-group">
+                    <label for="signup-id">계정 아이디</label>
+                    <input type="text" id="signup-id" placeholder="영문/숫자 아이디" required>
+                </div>
+                <div class="input-group">
+                    <label for="signup-pw">계정 비밀번호</label>
+                    <input type="password" id="signup-pw" placeholder="비밀번호" required>
+                </div>
+                
+                <!-- 강아지 꾸미기 섹션 -->
+                <div class="custom-section">
+                    <h3>🎨 내 강아지 맞춤 디자인</h3>
+                    
+                    <div class="input-group">
+                        <label for="custom-name">강아지 이름</label>
+                        <input type="text" id="custom-name" placeholder="예: 바둑이, 초코" value="바둑이" required>
+                    </div>
+
+                    <div class="custom-row">
+                        <label>털 색상 (Fur Color)</label>
+                        <div class="color-options">
+                            <button type="button" class="color-btn active" style="background-color: #ffcc80;" data-color="#ffcc80" title="골든 카라멜"></button>
+                            <button type="button" class="color-btn" style="background-color: #fff9e6;" data-color="#fff9e6" title="몽실 크림"></button>
+                            <button type="button" class="color-btn" style="background-color: #8d5b4c;" data-color="#8d5b4c" title="초코 브라운"></button>
+                            <button type="button" class="color-btn" style="background-color: #34495e;" data-color="#34495e" title="시크 블랙"></button>
+                            <button type="button" class="color-btn" style="background-color: #ffffff;" data-color="#ffffff" title="순백 화이트"></button>
+                        </div>
+                    </div>
+
+                    <div class="custom-row">
+                        <label>귀 모양 (Ear Style)</label>
+                        <div class="ear-options">
+                            <button type="button" class="ear-btn active" data-ear="floppy">🐾 처진 귀</button>
+                            <button type="button" class="ear-btn" data-ear="pointy">🦊 쫑긋 선 귀</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="submit-btn">강아지 입양하고 시작하기</button>
+            </form>
+            <div id="auth-error-msg" class="error-msg hidden">오류 메시지</div>
+        </div>
+    </div>
+
     <!-- 3D 렌더링 영역 -->
     <div id="canvas-container"></div>
 
-    <!-- UI 오버레이 -->
-    <div id="ui-container">
+    <!-- UI 오버레이 (인게임) -->
+    <div id="ui-container" class="hidden">
         
         <!-- 상단 헤더: 호감도 레벨 및 정보 + 날씨 표시 -->
         <header class="game-header">
             <div class="pet-profile">
                 <span class="pet-emoji">🐶</span>
                 <div class="pet-info">
-                    <h1 id="pet-name">바둑이</h1>
+                    <div class="name-row">
+                        <h1 id="pet-name">바둑이</h1>
+                        <span id="sync-status" class="sync-status">☁️ 로컬</span>
+                    </div>
                     <div class="status-meta">
                         <span id="pet-status-text">행복함</span>
                         <span id="weather-badge" class="weather-badge">☀️ 맑음</span>
@@ -47,6 +123,7 @@
                     <div id="affinity-bar-fill" class="affinity-bar-fill" style="width: 0%;"></div>
                 </div>
             </div>
+            <button id="btn-logout" class="logout-btn">로그아웃</button>
         </header>
 
         <!-- 좌측 패널: 강아지 욕구 상태 (목마름, 배고픔, 청결도) -->
@@ -98,7 +175,7 @@
                 <span class="btn-icon">🦮</span> 산책하기
             </button>
             <button id="btn-clean" class="action-btn">
-                <span class="btn-icon">🧹</span> 똥 치우기
+                <span class="btn-icon">🧹</span> 청소하기
             </button>
             <button id="btn-edit-mode" class="action-btn toggle-btn">
                 <span class="btn-icon">🛠️</span> 배치하기

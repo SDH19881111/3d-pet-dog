@@ -1,26 +1,36 @@
-// 강아지 키우기 게임 상태 관리 모듈 (Level 1-5 확장 및 날씨, 산책 로직 추가)
+// 강아지 키우기 게임 상태 관리 모듈 (커스터마이징, 백엔드 연동, 쓰레기 수거 로직 추가)
 
 const DEFAULT_STATE = {
     petName: "바둑이",
     affinityLevel: 1,
-    affinityXP: 0, // 0 to 100
-    hunger: 100, // 0 to 100
-    thirst: 100, // 0 to 100
-    cleanliness: 100, // 0 to 100
+    affinityXP: 0, 
+    hunger: 100, 
+    thirst: 100, 
+    cleanliness: 100, 
     placedItems: [], 
     poops: [], 
     equippedClothes: null,
     lastSaved: Date.now(),
     
     // 하루 쓰다듬기 카운터
-    lastPetDate: "", // YYYY-MM-DD
+    lastPetDate: "", 
     dailyPetCount: 0,
     
     // 날씨 상태
-    currentWeather: "clear" // "clear", "rain", "heatwave", "wind"
+    currentWeather: "clear",
+
+    // 신규 추가: 커스터마이징 데이터
+    furColor: "#ffcc80",
+    earType: "floppy",
+
+    // 신규 추가: 마당 쓰레기 리스트
+    trash: [],
+
+    // 계정 정보
+    username: null,
+    isOnline: false
 };
 
-// 5단계 레벨별 아이템 리스트 확장
 export const SHOP_ITEMS = {
     house: [
         { id: "house_basic", name: "종이 박스 집", desc: "기본적이고 빈티지한 골판지 집", level: 1, emoji: "📦" },
@@ -52,14 +62,27 @@ export const SHOP_ITEMS = {
     ]
 };
 
+// 쓰레기 타입 리스트 정의
+export const TRASH_TYPES = [
+    { type: "can", name: "찌그러진 알루미늄 캔", emoji: "🥫" },
+    { type: "paper", name: "구겨진 종이 조각", emoji: "📄" },
+    { type: "bottle", name: "버려진 페트병", emoji: "🍼" }
+];
+
 class GameStateManager {
     constructor() {
         this.state = { ...DEFAULT_STATE };
         this.listeners = {};
-        this.loadState();
         
-        // 1초 주기로 상태 업데이트 및 환경 감쇠 진행
+        // 1초 주기로 자동 감쇠 작동
         this.decayInterval = setInterval(() => this.decayStats(), 1000);
+        
+        // 20초 주기 자동 클라우드 백업 가동
+        this.autoSaveInterval = setInterval(() => {
+            if (this.state.isOnline && this.state.username) {
+                this.saveToCloud();
+            }
+        }, 20000);
     }
 
     subscribe(event, callback) {
@@ -73,6 +96,25 @@ class GameStateManager {
         if (this.listeners[event]) {
             this.listeners[event].forEach(cb => cb(data));
         }
+    }
+
+    // 로그인 시 상태 주입
+    setLoginSession(username, petState, isOnline = true) {
+        this.state = { 
+            ...DEFAULT_STATE, 
+            ...petState, 
+            username, 
+            isOnline 
+        };
+        this.emit("loginSuccess", this.state);
+        this.saveState();
+    }
+
+    // 로그아웃 처리
+    logout() {
+        this.state = { ...DEFAULT_STATE };
+        localStorage.removeItem("my_little_puppy_save");
+        this.emit("logout", null);
     }
 
     loadState() {
@@ -90,7 +132,7 @@ class GameStateManager {
                 }
             }
         } catch (e) {
-            console.error("로드 중 에러 발생, 새 게임 상태로 초기화:", e);
+            console.error("로컬 로드 에러:", e);
             this.state = { ...DEFAULT_STATE };
         }
     }
@@ -100,25 +142,65 @@ class GameStateManager {
             this.state.lastSaved = Date.now();
             localStorage.setItem("my_little_puppy_save", JSON.stringify(this.state));
         } catch (e) {
-            console.error("세이브 에러:", e);
+            console.error("로컬 저장 에러:", e);
+        }
+    }
+
+    // 클라우드 백업 API 호출
+    async saveToCloud() {
+        if (!this.state.username) return;
+        
+        this.emit("syncing", true);
+        try {
+            const response = await fetch("/functions/api/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: this.state.username,
+                    petState: this.state
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                this.emit("syncComplete", { success: true });
+            } else {
+                console.error("클라우드 저장 실패:", data.error);
+                this.emit("syncComplete", { success: false });
+            }
+        } catch (err) {
+            console.error("네트워크 에러로 저장 실패:", err);
+            this.emit("syncComplete", { success: false });
         }
     }
 
     applyOfflineDecay(seconds) {
-        // 기본 감쇠량
         const hungerDecay = Math.min(seconds * 0.03, 85); 
         const thirstDecay = Math.min(seconds * 0.05, 85);
         
         this.state.hunger = Math.max(0, this.state.hunger - hungerDecay);
         this.state.thirst = Math.max(0, this.state.thirst - thirstDecay);
 
-        // 방치 중 똥 생성 (최대 3개)
+        // 방치 중 똥 및 쓰레기 생성
         if (seconds > 3600) {
-            const currentPoopsCount = this.state.poops.length;
-            const newPoops = Math.min(3 - currentPoopsCount, Math.floor(seconds / 28800));
-            for (let i = 0; i < newPoops; i++) {
+            const count = Math.min(3, Math.floor(seconds / 28800));
+            // 똥 소환
+            for (let i = 0; i < count; i++) {
                 this.state.poops.push({
                     id: "poop_" + Math.random().toString(36).substr(2, 9),
+                    position: {
+                        x: (Math.random() - 0.5) * 4,
+                        y: 0.1,
+                        z: (Math.random() - 0.5) * 4
+                    }
+                });
+            }
+            // 쓰레기 소환
+            for (let i = 0; i < count; i++) {
+                const trashType = TRASH_TYPES[Math.floor(Math.random() * TRASH_TYPES.length)];
+                this.state.trash.push({
+                    id: "trash_" + Math.random().toString(36).substr(2, 9),
+                    type: trashType.type,
                     position: {
                         x: (Math.random() - 0.5) * 4,
                         y: 0.1,
@@ -133,45 +215,42 @@ class GameStateManager {
     }
 
     decayStats() {
-        // 날씨 효과에 따라 감쇠 속도 보정
         let hungerMultiplier = 1.0;
         let thirstMultiplier = 1.0;
         let cleanlinessMultiplier = 1.0;
 
         switch (this.state.currentWeather) {
             case 'rain':
-                // 비가 오면 진흙이 묻어 청결도가 빠르게 감소
                 cleanlinessMultiplier = 1.5;
                 break;
             case 'heatwave':
-                // 폭염에는 수분이 극도로 빠르게 감소
                 thirstMultiplier = 2.5;
                 break;
             case 'wind':
-                // 강풍에는 체온 유지를 위해 에너지를 소모하여 포만감이 빠르게 감소
                 hungerMultiplier = 1.8;
                 break;
         }
 
-        // 능력치 실시간 감소
-        this.state.hunger = Math.max(0, this.state.hunger - 0.05 * hungerMultiplier);
-        this.state.thirst = Math.max(0, this.state.thirst - 0.08 * thirstMultiplier);
+        // 실시간 배고픔/목마름 감소
+        this.state.hunger = Math.max(0, this.state.hunger - 0.04 * hungerMultiplier);
+        this.state.thirst = Math.max(0, this.state.thirst - 0.06 * thirstMultiplier);
 
-        // 마당에 똥이 있는 경우 청결도가 누적 감소
-        if (this.state.poops.length > 0) {
-            const poopDecay = this.state.poops.length * 0.25 * cleanlinessMultiplier;
-            this.state.cleanliness = Math.max(0, this.state.cleanliness - poopDecay);
+        // 똥과 쓰레기 총량에 따라 청결도 급감
+        const dirtyFactor = this.state.poops.length + this.state.trash.length;
+        if (dirtyFactor > 0) {
+            const decay = dirtyFactor * 0.25 * cleanlinessMultiplier;
+            this.state.cleanliness = Math.max(0, this.state.cleanliness - decay);
         } else {
-            // 깨끗한 마당일 경우 청결도 서서히 자연 회복
-            this.state.cleanliness = Math.min(100, this.state.cleanliness + 0.08);
+            // 깨끗하면 자연 충전
+            this.state.cleanliness = Math.min(100, this.state.cleanliness + 0.1);
         }
 
-        // 호감도 정산 (방치 상태 체크)
+        // 호감도 정산
         const isNeglected = this.state.hunger < 25 || this.state.thirst < 25 || this.state.cleanliness < 25;
         if (!isNeglected) {
-            this.gainAffinityXP(0.015); // 평상시 느린 자동 상승
+            this.gainAffinityXP(0.015);
         } else {
-            this.gainAffinityXP(-0.01); // 방치 시 감소
+            this.gainAffinityXP(-0.015);
         }
 
         this.emit("statsChanged", this.state);
@@ -179,8 +258,9 @@ class GameStateManager {
     }
 
     updateCleanliness() {
-        if (this.state.poops.length > 0) {
-            this.state.cleanliness = Math.max(0, 100 - (this.state.poops.length * 20));
+        const dirtyCount = this.state.poops.length + this.state.trash.length;
+        if (dirtyCount > 0) {
+            this.state.cleanliness = Math.max(0, 100 - (dirtyCount * 15));
         } else {
             this.state.cleanliness = 100;
         }
@@ -195,9 +275,10 @@ class GameStateManager {
                 this.state.affinityLevel += 1;
                 this.state.affinityXP = 0;
                 this.emit("levelUp", this.state.affinityLevel);
-                this.emit("notification", `🎉 축하합니다! 호감도 레벨 ${this.state.affinityLevel} 달성! 새로운 아이템들이 해금되었습니다!`);
+                this.emit("notification", `🎉 축하합니다! 호감도 레벨 ${this.state.affinityLevel} 달성!`);
+                if (this.state.isOnline) this.saveToCloud();
             } else {
-                this.state.affinityXP = 100; // 최고 레벨 5 캡
+                this.state.affinityXP = 100;
             }
         } else if (this.state.affinityXP < 0) {
             this.state.affinityXP = 0;
@@ -205,105 +286,103 @@ class GameStateManager {
         this.emit("affinityChanged", { xp: this.state.affinityXP, level: this.state.affinityLevel });
     }
 
-    // 날씨 설정 및 알림 발생
     setWeather(weather) {
         if (this.state.currentWeather === weather) return;
         this.state.currentWeather = weather;
 
         let weatherMsg = "";
         switch (weather) {
-            case "clear": weatherMsg = "☀️ 날씨가 다시 맑아졌습니다. 마당이 아주 화창합니다!"; break;
-            case "rain": weatherMsg = "🌧️ 비가 오기 시작합니다! 강아지의 몸이 젖어 청결도가 빠르게 닳습니다."; break;
-            case "heatwave": weatherMsg = "🥵 찌는 듯한 폭염입니다! 강아지가 지치지 않게 시원한 물을 자주 주세요."; break;
-            case "wind": weatherMsg = "💨 거센 찬바람이 붑니다! 에너지를 많이 써서 포만감이 빠르게 닳습니다."; break;
+            case "clear": weatherMsg = "☀️ 하늘이 맑아졌습니다. 마당이 아주 화창합니다!"; break;
+            case "rain": weatherMsg = "🌧️ 비바람이 치기 시작합니다! 강아지의 청결도가 빠르게 닳습니다."; break;
+            case "heatwave": weatherMsg = "🥵 찌는 폭염이 찾아왔습니다! 강아지가 더워하니 물을 자주 주세요."; break;
+            case "wind": weatherMsg = "💨 강풍이 몰아칩니다! 강아지의 포만감이 빠르게 소모됩니다."; break;
         }
 
         this.emit("weatherChanged", weather);
         this.emit("notification", weatherMsg);
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
     }
 
-    // 쓰다듬기 (하루 5회 제한 장치 탑재)
+    // 쓰다듬기 (하루 5회 제한)
     pet() {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const today = new Date().toISOString().split('T')[0];
         
-        // 날짜가 바뀌었으면 카운터 초기화
         if (this.state.lastPetDate !== today) {
             this.state.lastPetDate = today;
             this.state.dailyPetCount = 0;
         }
 
         if (this.state.dailyPetCount >= 5) {
-            // 제한 도달: 3D 반응은 보여주되, 호감도는 올리지 않음
             this.emit("petAction", { gainedXP: false });
-            this.emit("notification", "🐶 강아지가 행복해하지만, 오늘 쓰다듬기 호감도는 이미 꽉 찼습니다! (최대 5회)");
+            this.emit("notification", "🐶 강아지가 행복해하지만, 오늘 호감도는 충분히 올랐습니다! (최대 5회)");
             return;
         }
 
-        // 쓰다듬기 적용
         this.state.dailyPetCount += 1;
-        this.gainAffinityXP(8); // 쓰다듬기 1회당 8 XP
+        this.gainAffinityXP(8);
         this.state.cleanliness = Math.max(0, this.state.cleanliness - 0.5);
         this.emit("petAction", { gainedXP: true });
-        this.emit("notification", `👋 강아지를 쓰다듬어 주었습니다! (오늘의 쓰다듬기: ${this.state.dailyPetCount}/5)`);
+        this.emit("notification", `👋 강아지를 부드럽게 쓰다듬었습니다! (${this.state.dailyPetCount}/5)`);
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
     }
 
     feed() {
         this.state.hunger = Math.min(100, this.state.hunger + 30);
-        this.gainAffinityXP(1.5); // 먹이주기 소폭 증가
+        this.gainAffinityXP(1.5);
         this.emit("feedAction", null);
-        this.emit("notification", "🍖 강아지가 사료를 맛있게 먹습니다!");
+        this.emit("notification", "🍖 강아지가 밥을 맛있게 먹습니다!");
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
     }
 
     water() {
         this.state.thirst = Math.min(100, this.state.thirst + 35);
-        this.gainAffinityXP(1.5); // 물주기 소폭 증가
+        this.gainAffinityXP(1.5);
         this.emit("waterAction", null);
-        this.emit("notification", "💧 강아지가 물을 시원하게 들이킵니다!");
+        this.emit("notification", "💧 강아지가 물을 시원하게 마십니다!");
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
     }
 
-    // 산책하기 액션 (새로운 상호작용 기능)
     walk() {
         const isExhausted = this.state.hunger < 15 || this.state.thirst < 20;
         if (isExhausted) {
-            this.emit("notification", "⚠️ 강아지가 배고프거나 지쳐서 산책을 갈 수 없습니다. 밥과 물을 먼저 주세요!");
+            this.emit("notification", "⚠️ 강아지가 너무 피곤해합니다. 밥과 물을 먼저 챙겨주세요!");
             return false;
         }
 
-        // 상태 소모 및 호감도 큰 폭 증가
         this.state.hunger = Math.max(0, this.state.hunger - 15);
         this.state.thirst = Math.max(0, this.state.thirst - 20);
-        this.gainAffinityXP(15); // 산책은 15 XP 보상 (중요한 호감도 획득 경로)
+        this.gainAffinityXP(15); 
 
         this.emit("walkAction", null);
-        this.emit("notification", "🦮 강아지와 마당을 신나게 달리며 산책했습니다! 호감도 급상승!");
+        this.emit("notification", "🦮 강아지와 마당을 한바퀴 산책하며 뛰어놀았습니다!");
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
         return true;
     }
 
+    // 똥 소환
     spawnPoop(pos = null) {
         const poopId = "poop_" + Math.random().toString(36).substr(2, 9);
         const position = pos || {
-            x: (Math.random() - 0.5) * 5,
+            x: (Math.random() - 0.5) * 4.6,
             y: 0.1,
-            z: (Math.random() - 0.5) * 5
+            z: (Math.random() - 0.5) * 4.6
         };
         const newPoop = { id: poopId, position };
         this.state.poops.push(newPoop);
         this.updateCleanliness();
         this.emit("poopSpawned", newPoop);
-        this.emit("notification", "💩 강아지가 실례를 했습니다! 마당의 청결을 위해 치워주세요.");
+        this.emit("notification", "💩 강아지가 마당에 똥을 쌌습니다! 치워주세요.");
         this.saveState();
     }
 
+    // 똥 청소
     cleanPoop(poopId = null) {
-        if (this.state.poops.length === 0) {
-            this.emit("notification", "✨ 마당이 이미 청결하고 깨끗합니다!");
-            return;
-        }
+        if (this.state.poops.length === 0) return;
 
         let cleaned = null;
         if (poopId) {
@@ -317,11 +396,78 @@ class GameStateManager {
 
         if (cleaned) {
             this.updateCleanliness();
-            this.gainAffinityXP(4); // 똥 치워주면 호감도 상승
+            this.gainAffinityXP(4); 
             this.emit("poopCleaned", cleaned.id);
-            this.emit("notification", "🧹 똥을 깨끗하게 청소해 주었습니다! 청결 회복!");
+            this.emit("notification", "🧹 강아지 똥을 깨끗하게 치워주었습니다!");
+            this.saveState();
+            if (this.state.isOnline) this.saveToCloud();
         }
+    }
+
+    // 신규 추가: 쓰레기 소환
+    spawnTrash() {
+        if (this.state.trash.length >= 4) return; // 쓰레기가 너무 많아지지 않게 방지
+
+        const trashId = "trash_" + Math.random().toString(36).substr(2, 9);
+        const trashType = TRASH_TYPES[Math.floor(Math.random() * TRASH_TYPES.length)];
+        
+        // 날아가 떨어지게 하기 위해 x, z는 하늘 위에서 떨어질 수 있게 가공 (main.js에서 애니메이션 처리)
+        const position = {
+            x: (Math.random() - 0.5) * 4.5,
+            y: 3.5, // 3.5m 높이 공중에서 떨어짐
+            z: (Math.random() - 0.5) * 4.5
+        };
+
+        const newTrash = { id: trashId, type: trashType.type, name: trashType.name, position };
+        this.state.trash.push(newTrash);
+        
+        this.updateCleanliness();
+        this.emit("trashSpawned", newTrash);
+        this.emit("notification", `💨 바람에 날려 [${trashType.name}]가 마당에 떨어졌습니다!`);
         this.saveState();
+    }
+
+    // 신규 추가: 쓰레기 청소
+    cleanTrash(trashId) {
+        const index = this.state.trash.findIndex(t => t.id === trashId);
+        if (index !== -1) {
+            const removed = this.state.trash.splice(index, 1)[0];
+            
+            this.updateCleanliness();
+            this.gainAffinityXP(4); // 청소 시 호감도 보상
+            this.emit("trashCleaned", trashId);
+            this.emit("notification", `🧹 [${removed.name}]을 깨끗이 주웠습니다!`);
+            this.saveState();
+            if (this.state.isOnline) this.saveToCloud();
+            return true;
+        }
+        return false;
+    }
+
+    // 전체 마당 청소 (버튼 액션용)
+    cleanAllDirt() {
+        if (this.state.poops.length === 0 && this.state.trash.length === 0) {
+            this.emit("notification", "✨ 이미 마당이 티 없이 깨끗합니다!");
+            return;
+        }
+
+        // 똥 전부 청소
+        while (this.state.poops.length > 0) {
+            const p = this.state.poops.pop();
+            this.emit("poopCleaned", p.id);
+        }
+
+        // 쓰레기 전부 청소
+        while (this.state.trash.length > 0) {
+            const t = this.state.trash.pop();
+            this.emit("trashCleaned", t.id);
+        }
+
+        this.updateCleanliness();
+        this.gainAffinityXP(6);
+        this.emit("notification", "🧹 마당의 똥과 쓰레기를 전부 청소했습니다!");
+        this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
     }
 
     placeItem(itemId, itemCategory, position, rotation = 0) {
@@ -333,7 +479,6 @@ class GameStateManager {
             return false;
         }
 
-        // 단일 설치 카테고리 교체
         if (itemCategory === "house" || itemCategory === "bowl") {
             const existingIndex = this.state.placedItems.findIndex(i => i.category === itemCategory);
             if (existingIndex !== -1) {
@@ -355,6 +500,7 @@ class GameStateManager {
         this.emit("itemPlaced", newPlacedItem);
         this.emit("notification", `🎁 [${itemInfo.name}] 설치가 완료되었습니다.`);
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
         return true;
     }
 
@@ -364,6 +510,7 @@ class GameStateManager {
             const removed = this.state.placedItems.splice(index, 1)[0];
             this.emit("itemRemoved", placedId);
             this.saveState();
+            if (this.state.isOnline) this.saveToCloud();
             return true;
         }
         return false;
@@ -376,7 +523,6 @@ class GameStateManager {
             return false;
         }
 
-        // 이미 입고 있는 옷을 클릭하면 탈의
         if (this.state.equippedClothes === itemId) {
             this.state.equippedClothes = null;
             this.emit("clothesEquipped", null);
@@ -388,11 +534,12 @@ class GameStateManager {
         }
 
         this.saveState();
+        if (this.state.isOnline) this.saveToCloud();
         return true;
     }
 
     resetState() {
-        this.state = { ...DEFAULT_STATE, poops: [], placedItems: [] };
+        this.state = { ...DEFAULT_STATE, poops: [], placedItems: [], trash: [] };
         localStorage.removeItem("my_little_puppy_save");
         this.emit("stateReset", this.state);
         this.emit("notification", "🔄 저장 데이터가 초기화되었습니다.");
