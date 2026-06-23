@@ -62,6 +62,17 @@ const uiContainer = document.getElementById('ui-container');
 // 배치 상태 모드
 let isEditMode = false;
 
+// 이동/선택 모드 (RPG 좌클릭 식): 켜져 있으면 땅 클릭=이동, 물건/오물 클릭=선택·청소
+let interactMode = true;
+let selectedPlacedId = null;   // 현재 선택된 배치 아이템 id
+let selectionIndicator = null; // 선택된 물건 아래 표시되는 링
+let camAnimating = false;      // 배치 카메라 전환 중에는 팔로우 캠 일시 정지
+
+// 마당(땅) 크기 설정 — 기존보다 약 2배 확장
+const YARD_RADIUS = 11;     // 잔디 반지름
+const FENCE_RADIUS = 10.6;  // 울타리 반지름
+const MOVE_RADIUS = 10;     // 펫 이동/아이템 배치 가능 반지름
+
 // --- 초기화 과정 ---
 function init() {
     clock = new THREE.Clock();
@@ -69,7 +80,8 @@ function init() {
     // 1. Scene 설정
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xe8f4f8);
-    scene.fog = new THREE.FogExp2(0xe8f4f8, 0.08);
+    // 마당이 넓어졌으므로 멀리까지 보이도록 안개를 옅게 조정
+    scene.fog = new THREE.FogExp2(0xe8f4f8, 0.028);
 
     // 2. Camera 설정
     camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -88,9 +100,9 @@ function init() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2.1; 
+    controls.maxPolarAngle = Math.PI / 2.1;
     controls.minDistance = 3;
-    controls.maxDistance = 14;
+    controls.maxDistance = 20;
     controls.target.set(0, 0.4, 0);
 
     // 5. 조명 설정
@@ -102,14 +114,15 @@ function init() {
     scene.add(hemiLight);
 
     const dirLight = new THREE.DirectionalLight(0xfffbf0, 0.75);
-    dirLight.position.set(6, 12, 4);
+    dirLight.position.set(10, 18, 8);
     dirLight.castShadow = true;
-    dirLight.shadow.camera.top = 5;
-    dirLight.shadow.camera.bottom = -5;
-    dirLight.shadow.camera.left = -5;
-    dirLight.shadow.camera.right = 5;
+    // 넓어진 마당 전체에 그림자가 드리우도록 섀도우 카메라 범위 확장
+    dirLight.shadow.camera.top = YARD_RADIUS;
+    dirLight.shadow.camera.bottom = -YARD_RADIUS;
+    dirLight.shadow.camera.left = -YARD_RADIUS;
+    dirLight.shadow.camera.right = YARD_RADIUS;
     dirLight.shadow.camera.near = 0.1;
-    dirLight.shadow.camera.far = 25;
+    dirLight.shadow.camera.far = 45;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.bias = -0.0006;
@@ -121,8 +134,8 @@ function init() {
     // 7. 강아지 소환
     dog = new ChibiPet(scene);
 
-    // 8. 에디터 그리드 및 인디케이터
-    gridHelper = new THREE.GridHelper(10, 10, 0xbab2c8, 0xe8e5ee);
+    // 8. 에디터 그리드 및 인디케이터 (넓어진 마당 전체를 덮도록 확장)
+    gridHelper = new THREE.GridHelper(YARD_RADIUS * 2, YARD_RADIUS * 2, 0xbab2c8, 0xe8e5ee);
     gridHelper.position.y = 0.01;
     gridHelper.visible = false;
     scene.add(gridHelper);
@@ -135,6 +148,15 @@ function init() {
     placementIndicator.visible = false;
     scene.add(placementIndicator);
 
+    // 선택된 물건 아래에 표시되는 청록색 선택 링 (이동/선택 모드)
+    const selGeo = new THREE.RingGeometry(0.34, 0.42, 32);
+    const selMat = new THREE.MeshBasicMaterial({ color: 0x3ad1c8, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+    selectionIndicator = new THREE.Mesh(selGeo, selMat);
+    selectionIndicator.rotation.x = Math.PI / 2;
+    selectionIndicator.position.y = 0.03;
+    selectionIndicator.visible = false;
+    scene.add(selectionIndicator);
+
     // 9. 날씨 시스템 요소 구축 (빗방울, 낙엽, 폭염아지랑이, 구름)
     buildCloudsSystem();
     buildRainSystem();
@@ -144,6 +166,9 @@ function init() {
     // 10. 이벤트 등록
     setupEventListeners();
     setupAuthListeners();
+
+    // 이동/선택 모드 기본 ON → 십자선 커서
+    renderer.domElement.style.cursor = 'crosshair';
 
     // 로컬 저장소에서 데이터 로드 (새로고침 시 자동 로그인 지원)
     gameState.loadState();
@@ -164,21 +189,22 @@ function init() {
 
 // 마당 잔디 및 나무들
 function buildEnvironment() {
-    const groundGeo = new THREE.CylinderGeometry(5.8, 5.8, 0.2, 36);
+    const groundGeo = new THREE.CylinderGeometry(YARD_RADIUS, YARD_RADIUS, 0.2, 48);
     // 인스턴스로 바인딩하여 비가 올 때 어둡게 젖도록 처리 지원
-    groundMaterial = new THREE.MeshStandardMaterial({ color: 0xabebc6, roughness: 0.95 }); 
+    groundMaterial = new THREE.MeshStandardMaterial({ color: 0xabebc6, roughness: 0.95 });
     groundPlane = new THREE.Mesh(groundGeo, groundMaterial);
     groundPlane.position.y = -0.1;
     groundPlane.receiveShadow = true;
     scene.add(groundPlane);
 
-    // 울타리
+    // 울타리 (넓어진 마당 둘레에 맞춰 개수 증가)
     const fenceMat = new THREE.MeshStandardMaterial({ color: 0xfffaf0, roughness: 0.9 });
     const fenceGeo = new THREE.CapsuleGeometry(0.04, 0.22, 6, 12);
-    const radius = 5.4;
+    const radius = FENCE_RADIUS;
+    const fenceCount = Math.round(radius * 5); // 둘레 비례 개수
     fenceGroup = new THREE.Group(); // 강풍 시 흔들림을 주도록 그룹화
-    for (let i = 0; i < 28; i++) {
-        const angle = (i / 28) * Math.PI * 2;
+    for (let i = 0; i < fenceCount; i++) {
+        const angle = (i / fenceCount) * Math.PI * 2;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
 
@@ -190,11 +216,14 @@ function buildEnvironment() {
     }
     scene.add(fenceGroup);
 
-    // 나무들
+    // 나무들 (넓어진 마당 외곽에 재배치 + 추가)
     treesArray = [];
-    treesArray.push(createSoftTree(-3.8, 0, -2.8));
-    treesArray.push(createSoftTree(3.8, 0, -3.2));
-    treesArray.push(createSoftTree(-4.2, 0, 2.2));
+    treesArray.push(createSoftTree(-7.5, 0, -5.5));
+    treesArray.push(createSoftTree(7.5, 0, -6.2));
+    treesArray.push(createSoftTree(-8.2, 0, 4.5));
+    treesArray.push(createSoftTree(8.0, 0, 4.0));
+    treesArray.push(createSoftTree(0, 0, -8.6));
+    treesArray.push(createSoftTree(-2.5, 0, 8.2));
 }
 
 function createSoftTree(x, y, z) {
@@ -617,7 +646,7 @@ function setupEventListeners() {
     document.getElementById('btn-pet').addEventListener('click', () => {
         gameState.state.isResting = false;
         if (dog.state === 'sleep') {
-            gameState.emit("notification", "💤 자던 강아지가 일어나 기분이 좋아 보입니다!");
+            gameState.disturbSleep(); // 잠 깨우기 = 잦은 방해 카운트
             dog.changeState('idle');
         }
         gameState.pet();
@@ -681,14 +710,23 @@ function setupEventListeners() {
         gameState.state.isResting = false;
         const walkSuccess = gameState.walk();
         if (walkSuccess) {
-            dog.changeState('walk_action', new THREE.Vector3(2.5, 0.4, 0));
+            dog.changeState('walk_action', new THREE.Vector3(5, 0.4, 0));
         }
     });
 
-    document.getElementById('btn-clean').addEventListener('click', () => {
-        gameState.state.isResting = false;
-        gameState.cleanAllDirt();
+    // 깨우기 버튼: 자고 있으면 깨우고(잦은 방해 카운트), 깨어 있으면 안내만
+    document.getElementById('btn-wake').addEventListener('click', () => {
+        if (dog.state === 'sleep') {
+            gameState.state.isResting = false;
+            gameState.disturbSleep();
+            dog.changeState('idle');
+        } else {
+            gameState.emit("notification", "🐶 펫이 지금 말똥말똥 깨어 있어요!");
+        }
     });
+
+    // 이동/선택 모드 토글 (RPG 좌클릭 식)
+    document.getElementById('btn-interact').addEventListener('click', () => toggleInteractMode());
 
     document.getElementById('btn-wash').addEventListener('click', () => {
         if (dog.state === 'sleep') {
@@ -1043,9 +1081,13 @@ function toggleEditMode(forceState = null) {
         btnEditMode.classList.add('active');
         shopPanel.classList.remove('hidden');
         gridHelper.visible = true;
+        // 배치 모드에서는 선택 표시 해제
+        selectionIndicator.visible = false;
+        selectedPlacedId = null;
         document.querySelector('.tab-btn[data-category="house"]').click();
         controls.minPolarAngle = 0.2;
-        gsapToCameraTarget(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 7, 7));
+        // 넓어진 마당 전체가 보이도록 더 높고 멀리서 내려다봄
+        gsapToCameraTarget(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 13, 13));
     } else {
         btnEditMode.classList.remove('active');
         shopPanel.classList.add('hidden');
@@ -1062,15 +1104,50 @@ function gsapToCameraTarget(targetPos, camPos) {
     const steps = 25;
     const startCam = camera.position.clone();
     const startTar = controls.target.clone();
+    camAnimating = true; // 전환 중에는 팔로우 캠 일시 정지
 
     function step() {
         t += 1 / steps;
         camera.position.lerpVectors(startCam, camPos, t);
         controls.target.lerpVectors(startTar, targetPos, t);
         controls.update();
-        if (t < 1) requestAnimationFrame(step);
+        if (t < 1) {
+            requestAnimationFrame(step);
+        } else {
+            camAnimating = false;
+        }
     }
     step();
+}
+
+// 이동/선택 모드 토글 (RPG 좌클릭 식 상호작용 on/off)
+function toggleInteractMode(force = null) {
+    interactMode = (force !== null) ? force : !interactMode;
+    const btn = document.getElementById('btn-interact');
+
+    if (interactMode) {
+        btn.classList.add('active');
+        renderer.domElement.style.cursor = 'crosshair';
+        showNotification("🖱️ 이동/선택 모드 ON — 땅을 클릭하면 이동, 똥·쓰레기·물건을 클릭하면 청소/선택돼요.");
+    } else {
+        btn.classList.remove('active');
+        renderer.domElement.style.cursor = 'grab';
+        selectionIndicator.visible = false;
+        selectedPlacedId = null;
+        showNotification("🔄 이동/선택 모드 OFF — 이제 화면을 자유롭게 돌려보며 구경할 수 있어요.");
+    }
+}
+
+// 배치된 물건을 선택 표시 (이동/선택 모드)
+function selectPlacedItem(obj) {
+    selectionIndicator.position.set(obj.position.x, 0.03, obj.position.z);
+    selectionIndicator.visible = true;
+    selectedPlacedId = obj.userData.placedId;
+
+    const species = gameState.state.species || "dog";
+    const catItems = SHOP_ITEMS[species][obj.userData.category] || [];
+    const matched = catItems.find(i => i.id === obj.userData.itemId);
+    showNotification(`🔹 [${matched ? matched.name : '아이템'}] 을(를) 선택했어요. (배치하기 모드에서 위치 변경/철거 가능)`);
 }
 
 // --- 마우스 레이캐스팅 클릭 & 드래그 ---
@@ -1087,7 +1164,7 @@ function onPointerMove(event) {
             const snapX = Math.round(point.x);
             const snapZ = Math.round(point.z);
 
-            if (snapX * snapX + snapZ * snapZ < 5.0 * 5.0) {
+            if (snapX * snapX + snapZ * snapZ < MOVE_RADIUS * MOVE_RADIUS) {
                 placementIndicator.position.set(snapX, 0.05, snapZ);
                 placementIndicator.visible = true;
             } else {
@@ -1146,9 +1223,11 @@ function onPointerDown(event) {
             }
         }
     } else {
-        // --- 인게임 일반 상호작용 클릭 ---
+        // --- 인게임 일반 상호작용 클릭 (이동/선택 모드일 때만) ---
+        if (!interactMode) return; // 모드 OFF면 화면 회전/줌만, 게임 상호작용은 무시
+
         const intersects = raycaster.intersectObjects(scene.children, true);
-        
+
         // 1. 강아지 터치
         const hitDog = intersects.some(i => {
             let p = i.object;
@@ -1162,7 +1241,7 @@ function onPointerDown(event) {
         if (hitDog) {
             if (dog.state === 'sleep') {
                 gameState.state.isResting = false;
-                gameState.emit("notification", "💤 자고 있던 펫이 눈을 떴습니다.");
+                gameState.disturbSleep(); // 클릭으로 깨우기 = 잦은 방해 카운트
                 dog.changeState('idle');
             } else {
                 gameState.pet();
@@ -1170,7 +1249,7 @@ function onPointerDown(event) {
             return;
         }
 
-        // 2. 똥 터치 (치우기)
+        // 2. 똥 터치 (개별 치우기)
         const hitPoop = intersects.find(i => {
             let p = i.object;
             while (p && p !== scene) {
@@ -1187,7 +1266,7 @@ function onPointerDown(event) {
             return;
         }
 
-        // 3. 신규 추가: 쓰레기 터치 (줍기)
+        // 3. 쓰레기 터치 (개별 줍기)
         const hitTrash = intersects.find(i => {
             let p = i.object;
             while (p && p !== scene) {
@@ -1204,11 +1283,30 @@ function onPointerDown(event) {
             return;
         }
 
-        // 4. 마당 빈 땅 터치 (배회 이동)
+        // 4. 배치된 물건 터치 (선택)
+        const hitItem = intersects.find(i => {
+            let p = i.object;
+            while (p && p !== scene) {
+                if (p.userData && p.userData.isPlacedItem) return true;
+                p = p.parent;
+            }
+            return false;
+        });
+
+        if (hitItem) {
+            let itemObj = hitItem.object;
+            while (itemObj && !(itemObj.userData && itemObj.userData.isPlacedItem)) itemObj = itemObj.parent;
+            selectPlacedItem(itemObj);
+            return;
+        }
+
+        // 5. 마당 빈 땅 터치 (해당 지점으로 이동)
         const hitGround = raycaster.intersectObject(groundPlane);
         if (hitGround.length > 0 && dog.state !== 'sleep' && dog.state !== 'walk_action') {
             const point = hitGround[0].point;
-            if (point.x * point.x + point.z * point.z < 4.8 * 4.8) {
+            if (point.x * point.x + point.z * point.z < MOVE_RADIUS * MOVE_RADIUS) {
+                selectionIndicator.visible = false; // 이동 시 선택 해제
+                selectedPlacedId = null;
                 dog.changeState('walk', new THREE.Vector3(point.x, 0.4, point.z));
             }
         }
@@ -1229,10 +1327,10 @@ function handleDogAutonomy() {
     }
 
     if (rand < 0.28) {
-        const targetX = (Math.random() - 0.5) * 5.2;
-        const targetZ = (Math.random() - 0.5) * 5.2;
+        const targetX = (Math.random() - 0.5) * (MOVE_RADIUS * 1.6);
+        const targetZ = (Math.random() - 0.5) * (MOVE_RADIUS * 1.6);
         dog.changeState('walk', new THREE.Vector3(targetX, 0.4, targetZ));
-    } 
+    }
     else if (rand < 0.38) {
         dog.changeState('sleep');
     }
@@ -1360,6 +1458,17 @@ function animate() {
     // 1. 강아지 업데이트
     if (dog) {
         dog.update(deltaTime, time);
+    }
+
+    // 1.5 팔로우 캠: 펫이 이동하면 카메라가 부드럽게 따라감 (배치/전환 중에는 정지)
+    if (dog && dog.group && !isEditMode && !camAnimating && controls) {
+        const dogPos = new THREE.Vector3();
+        dog.group.getWorldPosition(dogPos);
+        const desired = new THREE.Vector3(dogPos.x, 0.4, dogPos.z);
+        // 목표(펫)와 현재 타깃의 차이를 일정 비율만큼만 이동 → 부드러운 추적
+        const follow = desired.sub(controls.target).multiplyScalar(Math.min(1, deltaTime * 2.2));
+        controls.target.add(follow);
+        camera.position.add(follow); // 카메라도 같은 양 평행이동 → 시점/거리 유지
     }
 
     // 2. 구름 유유히 떠다니기 애니메이션 (바람 부는 속도에 비례)

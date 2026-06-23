@@ -552,11 +552,12 @@ body, html {
 /* Action Panel (Bottom Center) */
 .action-panel {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
-    gap: 12px;
-    max-width: 900px;
+    gap: 8px;
+    max-width: 760px;
     margin: 0 auto;
-    padding: 15px 20px;
+    padding: 12px 16px;
     background: var(--panel-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -569,19 +570,27 @@ body, html {
 .action-btn {
     border: none;
     outline: none;
-    padding: 12px 20px;
+    padding: 7px 12px;
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    border-radius: 14px;
+    line-height: 1.2;
+    white-space: nowrap;       /* 글자가 세로로 서지 않고 한 줄 가로 정렬 */
+    flex: 0 0 auto;            /* 좁아져도 글자별로 줄바꿈되지 않도록 버튼 폭 유지 */
+    border-radius: 12px;
     background: white;
     color: var(--text-color);
     box-shadow: 0 4px 6px rgba(0,0,0,0.02);
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 5px;
     transition: var(--transition);
+}
+
+.action-btn .btn-icon {
+    font-size: 0.95rem;
+    line-height: 1;
 }
 
 .action-btn:hover {

@@ -582,7 +582,7 @@ export class ChibiPet {
             if (dist < 0.25) {
                 if (this.state === 'walk_action' && this.stateTimer < 5.0) {
                     const angle = time * 2.0;
-                    const r = 3.0;
+                    const r = 5.0;
                     this.targetPosition.set(Math.cos(angle) * r, this.group.position.y, Math.sin(angle) * r);
                 } else {
                     this.changeState('idle');

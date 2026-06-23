@@ -19,6 +19,7 @@ const DEFAULT_STATE = {
     // 하루 산책 카운터
     lastWalkDate: "",
     dailyWalkCount: 0,
+    lastWalkTime: 0, // 마지막 산책 시각(ms) — 5분 쿨타임 계산용
 
     // 하루 씻기기 카운터 (호감도 상승 제한용)
     lastWashDate: "",
@@ -210,7 +211,8 @@ class GameStateManager {
     constructor() {
         this.state = { ...DEFAULT_STATE };
         this.listeners = {};
-        
+        this.wakeTimestamps = []; // 잠 깨운 시각 기록(2분 내 3회 이상이면 호감도 하락)
+
         // 1초 주기로 자동 감쇠 작동
         this.decayInterval = setInterval(() => this.decayStats(), 1000);
         
@@ -403,14 +405,14 @@ class GameStateManager {
         }
 
         // === [4] 가혹 날씨(비/폭염/강풍)에 계속 노출되면 호감도가 가속하며 하락 ===
-        //  - 기본 하락 0.1%/초, 노출 10초마다 하락 속도 +5% 가속 (1.0→1.05→1.10…)
+        //  - 기본 하락 0.12%/초(기존 0.1에서 20% 더 빠르게), 노출 10초마다 하락 속도 +5% 가속
         //  - 맑음으로 바뀌거나 집에서 쉬면 가속도 초기화
         const isHarshWeather = this.state.currentWeather !== "clear";
         if (isHarshWeather && !this.state.isResting) {
             this.state.harshWeatherExposure = (this.state.harshWeatherExposure || 0) + 1;
             const accelSteps = Math.floor(this.state.harshWeatherExposure / 10);
             const multiplier = 1 + 0.05 * accelSteps;
-            this.gainAffinityXP(-0.1 * multiplier);
+            this.gainAffinityXP(-0.12 * multiplier);
         } else {
             this.state.harshWeatherExposure = 0;
         }
@@ -569,6 +571,17 @@ class GameStateManager {
             return false;
         }
 
+        // 산책 쿨타임: 1회 실시 후 5분 동안은 다시 산책 불가
+        const now = Date.now();
+        const WALK_COOLDOWN = 5 * 60 * 1000;
+        if (this.state.lastWalkTime && now - this.state.lastWalkTime < WALK_COOLDOWN) {
+            const remainMs = WALK_COOLDOWN - (now - this.state.lastWalkTime);
+            const m = Math.floor(remainMs / 60000);
+            const s = Math.ceil((remainMs % 60000) / 1000);
+            this.emit("notification", `⏳ 산책 직후라 잠시 숨을 고르는 중이에요. ${m}분 ${s}초 뒤에 다시 산책할 수 있어요.`);
+            return false;
+        }
+
         const isExhausted = this.state.hunger < 15 || this.state.thirst < 20;
         if (isExhausted) {
             this.emit("notification", "⚠️ 피곤해합니다. 밥과 물을 먼저 챙겨주세요!");
@@ -578,10 +591,11 @@ class GameStateManager {
         this.state.hunger = Math.max(0, this.state.hunger - 15);
         this.state.thirst = Math.max(0, this.state.thirst - 20);
         this.state.dailyWalkCount += 1;
-        this.gainAffinityXP(15); 
+        this.state.lastWalkTime = now;
+        this.gainAffinityXP(5);
 
         this.emit("walkAction", null);
-        this.emit("notification", `🦮 마당을 한바퀴 산책하며 뛰어놀았습니다! (${this.state.dailyWalkCount}/3)`);
+        this.emit("notification", `🦮 마당을 한바퀴 산책하며 뛰어놀았습니다! (${this.state.dailyWalkCount}/3, 호감도 +5%)`);
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
         return true;
@@ -613,6 +627,25 @@ class GameStateManager {
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
         return gainedXP;
+    }
+
+    // 잠을 깨울 때 호출: 2분 내 3회 이상 깨우면 현재 호감도(레벨 진행도)에서 20%p 하락
+    disturbSleep() {
+        const now = Date.now();
+        this.wakeTimestamps = (this.wakeTimestamps || []).filter(t => now - t <= 120000);
+        this.wakeTimestamps.push(now);
+
+        if (this.wakeTimestamps.length >= 3) {
+            this.wakeTimestamps = []; // 페널티 후 카운터 초기화
+            this.gainAffinityXP(-20);
+            this.emit("notification", "😾 2분 사이에 너무 자주 깨웠어요! 펫이 단단히 삐쳐서 호감도가 20%p 떨어졌습니다.");
+            this.saveState();
+            if (this.state.isOnline) this.saveToCloud();
+            return true;
+        }
+
+        this.emit("notification", `🥱 펫이 부스스 잠에서 깼습니다. (2분 내 ${this.wakeTimestamps.length}/3회 — 너무 자주 깨우면 삐져요!)`);
+        return false;
     }
 
     // 위기 상황(굶주림/탈수)으로 인한 전체 초기화: 펫 정체성(종족/이름/외형/계정)은 유지하고 진행 상황만 처음 가입 상태로
@@ -773,7 +806,16 @@ class GameStateManager {
 
         this.state.placedItems.push(newPlacedItem);
         this.emit("itemPlaced", newPlacedItem);
-        this.emit("notification", `🎁 [${itemInfo.name}] 설치가 완료되었습니다.`);
+
+        // 장난감을 설치하면 호감도가 3~10% 범위에서 랜덤 상승
+        if (itemCategory === "toy") {
+            const bonus = Math.floor(Math.random() * 8) + 3; // 3~10
+            this.gainAffinityXP(bonus);
+            this.emit("notification", `🧸 [${itemInfo.name}] 설치 완료! 새 장난감에 신나서 호감도가 +${bonus}% 올랐어요!`);
+        } else {
+            this.emit("notification", `🎁 [${itemInfo.name}] 설치가 완료되었습니다.`);
+        }
+
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
         return true;
@@ -811,7 +853,10 @@ class GameStateManager {
         } else {
             this.state.equippedClothes.push(itemId);
             this.emit("clothesEquipped", this.state.equippedClothes);
-            this.emit("notification", `👔 [${itemInfo.name}]을(를) 착용했습니다!`);
+            // 옷을 입히면 호감도가 3~10% 범위에서 랜덤 상승
+            const bonus = Math.floor(Math.random() * 8) + 3; // 3~10
+            this.gainAffinityXP(bonus);
+            this.emit("notification", `👔 [${itemInfo.name}]을(를) 착용했습니다! 멋진 모습에 호감도가 +${bonus}% 올랐어요!`);
         }
 
         this.saveState();
