@@ -143,6 +143,16 @@ function init() {
     // 10. 이벤트 등록
     setupEventListeners();
     setupAuthListeners();
+
+    // 로컬 저장소에서 데이터 로드 (새로고침 시 자동 로그인 지원)
+    gameState.loadState();
+    if (gameState.state.username) {
+        document.getElementById('auth-overlay').classList.add('hidden');
+        document.getElementById('ui-container').classList.remove('hidden');
+        syncStateTo3D();
+        updateStatusUI();
+    }
+
     animate();
 
     // 11. 날씨 변동 스케줄 작동 (90초마다 변경 체크)
@@ -929,6 +939,14 @@ function renderShopItems(category) {
                     card.classList.add('active');
                     currentSelectedItem = { id: item.id, category: category };
                     showNotification(`💡 마당을 터치해서 [${item.name}]을 배치하세요.`);
+                    
+                    // 자동으로 배치 모드 켜기 및 모달 닫기
+                    if (!isEditMode) {
+                        isEditMode = true;
+                        document.getElementById('toggle-edit-mode').classList.add('active');
+                        gridHelper.visible = true;
+                    }
+                    document.getElementById('shop-modal').classList.add('hidden');
                 }
             });
         } else {
@@ -1225,7 +1243,9 @@ function showCelebrationEffect() {
 function animate() {
     requestAnimationFrame(animate);
 
-    const deltaTime = clock.getDelta();
+    // 탭 비활성화 시 deltaTime이 너무 커지면 lerp에서 폭주하여 렌더링이 깨지는 현상(화면 사라짐) 방지
+    const rawDelta = clock.getDelta();
+    const deltaTime = Math.min(rawDelta, 0.05);
     const time = clock.getElapsedTime();
 
     // 1. 강아지 업데이트
