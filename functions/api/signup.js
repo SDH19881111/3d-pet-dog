@@ -21,6 +21,7 @@ export async function onRequestPost(context) {
                 message: "가입 완료 (임시 메모리 저장 모드 - 대시보드에서 KV 바인딩이 필요합니다!)",
                 username,
                 petState: {
+                    species: petCustomization.species || "dog",
                     petName: petCustomization.name || "바둑이",
                     affinityLevel: 1,
                     affinityXP: 0,
@@ -29,10 +30,12 @@ export async function onRequestPost(context) {
                     cleanliness: 100,
                     placedItems: [],
                     poops: [],
-                    equippedClothes: null,
+                    equippedClothes: [],
                     furColor: petCustomization.furColor || "#ffcc80",
                     earType: petCustomization.earType || "floppy",
-                    trash: []
+                    trash: [],
+                    lastWalkDate: "",
+                    dailyWalkCount: 0
                 }
             }), {
                 status: 200,
@@ -49,8 +52,9 @@ export async function onRequestPost(context) {
             });
         }
 
-        // 초기 강아지 상태 생성
+        // 초기 강아지/고양이/햄스터 상태 생성
         const initialPetState = {
+            species: petCustomization.species || "dog",
             petName: petCustomization.name || "바둑이",
             affinityLevel: 1,
             affinityXP: 0,
@@ -59,10 +63,12 @@ export async function onRequestPost(context) {
             cleanliness: 100,
             placedItems: [],
             poops: [],
-            equippedClothes: null,
+            equippedClothes: [], // 배열로 변경 (여러 옷 중복 착용)
             furColor: petCustomization.furColor || "#ffcc80",
             earType: petCustomization.earType || "floppy",
             trash: [],
+            lastWalkDate: "",
+            dailyWalkCount: 0,
             lastSaved: Date.now()
         };
 

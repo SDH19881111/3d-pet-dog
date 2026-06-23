@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { gameState, SHOP_ITEMS } from './state.js';
-import { ChibiDog } from './pet.js';
+import { ChibiPet } from './pet.js';
 import { createItemMesh, createPoopMesh, createTrashMesh } from './items.js';
 
 // --- 전역 변수 및 게임 환경 설정 ---
@@ -118,7 +118,7 @@ function init() {
     buildEnvironment();
 
     // 7. 강아지 소환
-    dog = new ChibiDog(scene);
+    dog = new ChibiPet(scene);
 
     // 8. 에디터 그리드 및 인디케이터
     gridHelper = new THREE.GridHelper(10, 10, 0xbab2c8, 0xe8e5ee);
@@ -390,8 +390,15 @@ function syncStateTo3D() {
     const state = gameState.state;
 
     petNameEl.textContent = state.petName;
+    
+    // 펫 3D 모델 재현 (종족이 변경되었을 수 있으므로 다시 생성)
+    if (dog && dog.group) {
+        scene.remove(dog.group);
+    }
+    dog = new ChibiPet(scene);
+    
     dog.updateCustomization(); // 색상 및 귀 커스텀 즉각 렌더링
-    dog.setClothes(state.equippedClothes);
+    dog.setClothes();
 
     // 가구 동기화
     Object.keys(placed3DItems).forEach(id => {
@@ -599,6 +606,7 @@ function setupEventListeners() {
     renderer.domElement.addEventListener('pointermove', onPointerMove);
 
     document.getElementById('btn-pet').addEventListener('click', () => {
+        gameState.state.isResting = false;
         if (dog.state === 'sleep') {
             gameState.emit("notification", "💤 자던 강아지가 일어나 기분이 좋아 보입니다!");
             dog.changeState('idle');
@@ -620,7 +628,8 @@ function setupEventListeners() {
         const bowlData = bowls[0];
         const bowl3D = placed3DItems[bowlData.id];
 
-        dog.changeState('walk', new THREE.Vector3(bowlData.position.x, 0.4, bowlData.position.z + 0.45));
+        gameState.state.isResting = false;
+        dog.changeState('walk', new THREE.Vector3(bowlData.position.x, 0.4, bowlData.position.z + 0.2));
         
         setTimeout(() => {
             dog.changeState('eat');
@@ -644,7 +653,8 @@ function setupEventListeners() {
         }
         
         const bowlData = bowls[0];
-        dog.changeState('walk', new THREE.Vector3(bowlData.position.x, 0.4, bowlData.position.z + 0.45));
+        gameState.state.isResting = false;
+        dog.changeState('walk', new THREE.Vector3(bowlData.position.x, 0.4, bowlData.position.z + 0.2));
         
         setTimeout(() => {
             dog.changeState('eat');
@@ -659,6 +669,7 @@ function setupEventListeners() {
         }
         if (dog.state === 'walk_action') return; 
 
+        gameState.state.isResting = false;
         const walkSuccess = gameState.walk();
         if (walkSuccess) {
             dog.changeState('walk_action', new THREE.Vector3(2.5, 0.4, 0));
@@ -666,7 +677,38 @@ function setupEventListeners() {
     });
 
     document.getElementById('btn-clean').addEventListener('click', () => {
+        gameState.state.isResting = false;
         gameState.cleanAllDirt();
+    });
+
+    document.getElementById('btn-wash').addEventListener('click', () => {
+        if (dog.state === 'sleep') {
+            gameState.emit("notification", "💤 자는 중이라 씻길 수 없습니다.");
+            return;
+        }
+        gameState.state.isResting = false;
+        gameState.state.cleanliness = 100;
+        gameState.emit("statsChanged", gameState.state);
+        showNotification("🧼 뽀득뽀득! 펫을 깨끗하게 씻겼습니다. 호감도가 오릅니다!");
+        gameState.gainAffinityXP(2.0);
+        showCelebrationEffect();
+    });
+
+    document.getElementById('btn-rest').addEventListener('click', () => {
+        const houses = gameState.state.placedItems.filter(i => i.category === 'house');
+        if (houses.length === 0) {
+            gameState.emit("notification", "⚠️ 쉴 수 있는 집이 없습니다! [배치하기]로 집을 설치해주세요.");
+            return;
+        }
+        const houseData = houses[0];
+        
+        gameState.state.isResting = true;
+        dog.changeState('walk', new THREE.Vector3(houseData.position.x, 0.4, houseData.position.z));
+        
+        setTimeout(() => {
+            dog.changeState('sleep');
+            showNotification("💤 펫이 집에서 편안하게 휴식을 취합니다. 날씨 영향을 받지 않습니다.");
+        }, 1500);
     });
 
     // 배치 편집모드
@@ -791,11 +833,19 @@ function setupAuthListeners() {
         });
     });
 
-    // 가입 폼 귀 스타일 버튼들
     const earBtns = document.querySelectorAll('.ear-btn');
     earBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             earBtns.forEach(b => b.classList.remove('active'));
+            e.currentTarget.classList.add('active');
+        });
+    });
+
+    // 종족 선택 버튼들 (새로 추가됨)
+    const speciesBtns = document.querySelectorAll('.species-btn');
+    speciesBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            speciesBtns.forEach(b => b.classList.remove('active'));
             e.currentTarget.classList.add('active');
         });
     });
@@ -856,6 +906,9 @@ function setupAuthListeners() {
         const activeEarBtn = document.querySelector('.ear-btn.active');
         const earType = activeEarBtn ? activeEarBtn.dataset.ear : "floppy";
 
+        const activeSpeciesBtn = document.querySelector('.species-btn.active');
+        const species = activeSpeciesBtn ? activeSpeciesBtn.dataset.species : "dog";
+
         try {
             const res = await fetch('/api/signup', {
                 method: 'POST',
@@ -863,7 +916,7 @@ function setupAuthListeners() {
                 body: JSON.stringify({ 
                     username, 
                     password, 
-                    petCustomization: { name: petName, furColor, earType }
+                    petCustomization: { name: petName, furColor, earType, species }
                 })
             });
             const data = await res.json();
@@ -886,7 +939,7 @@ function setupAuthListeners() {
             setTimeout(() => {
                 authOverlay.classList.add('hidden');
                 uiContainer.classList.remove('hidden');
-                const localPetState = { petName, furColor, earType };
+                const localPetState = { petName, furColor, earType, species };
                 gameState.setLoginSession(username, localPetState, false);
                 syncStateTo3D();
             }, 1200);
@@ -905,12 +958,17 @@ function setupAuthListeners() {
 
 function renderShopItems(category) {
     shopItemsList.innerHTML = '';
-    const items = SHOP_ITEMS[category];
+    const species = gameState.state.species || "dog";
+    const items = SHOP_ITEMS[species][category] || [];
     const userLevel = gameState.state.affinityLevel;
 
     items.forEach(item => {
         const isLocked = item.level > userLevel;
-        const isEquippedClothes = category === 'clothes' && gameState.state.equippedClothes === item.id;
+        let isEquippedClothes = false;
+        if (category === 'clothes') {
+            const clothesArr = Array.isArray(gameState.state.equippedClothes) ? gameState.state.equippedClothes : [];
+            isEquippedClothes = clothesArr.includes(item.id);
+        }
         
         let isPlaced = false;
         if (category === 'house' || category === 'bowl') {
@@ -942,13 +1000,12 @@ function renderShopItems(category) {
                     currentSelectedItem = { id: item.id, category: category };
                     showNotification(`💡 마당을 터치해서 [${item.name}]을 배치하세요.`);
                     
-                    // 자동으로 배치 모드 켜기 및 모달 닫기
+                    // 자동으로 배치 모드 켜기
                     if (!isEditMode) {
                         isEditMode = true;
-                        document.getElementById('toggle-edit-mode').classList.add('active');
+                        btnEditMode.classList.add('active'); // toggle-edit-mode -> btnEditMode
                         gridHelper.visible = true;
                     }
-                    document.getElementById('shop-modal').classList.add('hidden');
                 }
             });
         } else {
@@ -1059,7 +1116,12 @@ function onPointerDown(event) {
                 let p = targetPlaced.object;
                 while (p && !p.userData.isPlacedItem) p = p.parent;
                 
-                if (confirm(`🧹 [${SHOP_ITEMS[p.userData.category].find(i=>i.id===p.userData.itemId).name}]을 철거합니까?`)) {
+                const species = gameState.state.species || "dog";
+                const catItems = SHOP_ITEMS[species][p.userData.category] || [];
+                const matchedItem = catItems.find(i => i.id === p.userData.itemId);
+                const itemName = matchedItem ? matchedItem.name : "아이템";
+                
+                if (confirm(`🧹 [${itemName}]을 철거합니까?`)) {
                     gameState.removePlacedItem(p.userData.placedId);
                     renderShopItems(p.userData.category);
                 }
@@ -1081,7 +1143,8 @@ function onPointerDown(event) {
 
         if (hitDog) {
             if (dog.state === 'sleep') {
-                gameState.emit("notification", "💤 자고 있던 강아지가 눈을 떴습니다.");
+                gameState.state.isResting = false;
+                gameState.emit("notification", "💤 자고 있던 펫이 눈을 떴습니다.");
                 dog.changeState('idle');
             } else {
                 gameState.pet();

@@ -62,6 +62,15 @@
                 <div class="custom-section">
                     <h3>🎨 내 강아지 맞춤 디자인</h3>
                     
+                    <div class="custom-row">
+                        <label>동물 종류 (Species)</label>
+                        <div class="species-options">
+                            <button type="button" class="species-btn active" data-species="dog">🐶 강아지</button>
+                            <button type="button" class="species-btn" data-species="cat">🐱 고양이</button>
+                            <button type="button" class="species-btn" data-species="hamster">🐹 햄스터</button>
+                        </div>
+                    </div>
+
                     <div class="input-group">
                         <label for="custom-name">강아지 이름</label>
                         <input type="text" id="custom-name" placeholder="예: 바둑이, 초코" value="바둑이" required>
@@ -174,8 +183,14 @@
             <button id="btn-walk" class="action-btn">
                 <span class="btn-icon">🦮</span> 산책하기
             </button>
+            <button id="btn-wash" class="action-btn">
+                <span class="btn-icon">🛁</span> 씻기기
+            </button>
             <button id="btn-clean" class="action-btn">
                 <span class="btn-icon">🧹</span> 청소하기
+            </button>
+            <button id="btn-rest" class="action-btn">
+                <span class="btn-icon">💤</span> 집에서 쉬기
             </button>
             <button id="btn-edit-mode" class="action-btn toggle-btn">
                 <span class="btn-icon">🛠️</span> 배치하기

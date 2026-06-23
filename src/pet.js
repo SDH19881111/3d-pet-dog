@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { gameState } from './state.js';
 
-export class ChibiDog {
+export class ChibiPet {
     constructor(scene) {
         this.scene = scene;
         this.group = new THREE.Group();
         this.scene.add(this.group);
+        this.species = gameState.state.species || "dog";
         
         // 상태 설정
         this.state = 'idle'; // 'idle', 'walk', 'eat', 'pet', 'sleep', 'walk_action'
@@ -13,8 +14,7 @@ export class ChibiDog {
         this.targetPosition = new THREE.Vector3(0, 0, 0);
         this.velocity = new THREE.Vector3();
         this.walkSpeed = 1.8;
-        
-        this.equippedClothesMesh = null;
+        this.equippedClothesMeshes = [];
         
         // 3D 모델 빌드
         this.buildModel();
@@ -43,12 +43,23 @@ export class ChibiDog {
         const noseMaterial = new THREE.MeshStandardMaterial({ color: 0x1a252f, roughness: 0.8, metalness: 0.1 });
         const tongueMaterial = new THREE.MeshStandardMaterial({ color: 0xff8a9e, roughness: 0.8, metalness: 0.0 }); // 핑크 혀
 
-        // 1. 몸통 (Body) - 캡슐 가로 눕히기
-        const bodyGeo = new THREE.CapsuleGeometry(0.25, 0.32, 8, 16);
-        bodyGeo.rotateX(Math.PI / 2); 
+        // 1. 몸통 (Body) - 캡슐 가로 눕히기 (종족별 차이 적용)
+        if (this.species === 'hamster') {
+            const bodyGeo = new THREE.SphereGeometry(0.28, 16, 16);
+            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
+            this.body.position.set(0, 0, 0);
+        } else if (this.species === 'cat') {
+            const bodyGeo = new THREE.CapsuleGeometry(0.22, 0.3, 8, 16);
+            bodyGeo.rotateX(Math.PI / 2);
+            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
+            this.body.position.set(0, 0, 0);
+        } else {
+            const bodyGeo = new THREE.CapsuleGeometry(0.25, 0.32, 8, 16);
+            bodyGeo.rotateX(Math.PI / 2); 
+            this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
+            this.body.position.set(0, 0, 0);
+        }
         
-        this.body = new THREE.Mesh(bodyGeo, this.furMaterial);
-        this.body.position.set(0, 0, 0);
         this.body.castShadow = true;
         this.body.receiveShadow = true;
         this.group.add(this.body);
@@ -61,7 +72,11 @@ export class ChibiDog {
 
         // 2. 머리 피벗 및 머리 구체
         this.headPivot = new THREE.Group();
-        this.headPivot.position.set(0, 0.15, 0.2); 
+        if (this.species === 'hamster') {
+            this.headPivot.position.set(0, 0.1, 0.15); 
+        } else {
+            this.headPivot.position.set(0, 0.15, 0.2); 
+        }
         this.body.add(this.headPivot); 
 
         const headGeo = new THREE.SphereGeometry(0.3, 16, 16);
@@ -81,18 +96,31 @@ export class ChibiDog {
         this.head.add(cheekL);
         this.head.add(cheekR);
 
-        // 주둥이
-        const snoutGeo = new THREE.CapsuleGeometry(0.1, 0.06, 6, 10);
-        snoutGeo.rotateX(Math.PI / 2);
-        const snout = new THREE.Mesh(snoutGeo, bellyMaterial);
-        snout.position.set(0, -0.04, 0.22);
-        snout.castShadow = true;
-        this.head.add(snout);
-
-        // 코
-        const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), noseMaterial);
-        nose.position.set(0, 0.05, 0.06);
-        snout.add(nose);
+        // 주둥이 및 코 (종족별 차이 적용)
+        if (this.species === 'hamster') {
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), noseMaterial);
+            nose.position.set(0, -0.02, 0.28);
+            this.head.add(nose);
+            this.snout = new THREE.Group(); // dummy
+        } else if (this.species === 'cat') {
+            const snoutGeo = new THREE.CapsuleGeometry(0.08, 0.04, 6, 10);
+            snoutGeo.rotateX(Math.PI / 2);
+            this.snout = new THREE.Mesh(snoutGeo, bellyMaterial);
+            this.snout.position.set(0, -0.04, 0.25);
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), noseMaterial);
+            nose.position.set(0, 0.04, 0.06);
+            this.snout.add(nose);
+            this.head.add(this.snout);
+        } else {
+            const snoutGeo = new THREE.CapsuleGeometry(0.1, 0.06, 6, 10);
+            snoutGeo.rotateX(Math.PI / 2);
+            this.snout = new THREE.Mesh(snoutGeo, bellyMaterial);
+            this.snout.position.set(0, -0.04, 0.22);
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), noseMaterial);
+            nose.position.set(0, 0.05, 0.06);
+            this.snout.add(nose);
+            this.head.add(this.snout);
+        }
 
         // 눈
         const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
@@ -215,12 +243,21 @@ export class ChibiDog {
         this.tailPivot.position.set(0, 0.1, -0.26); 
         this.body.add(this.tailPivot);
 
-        const tailGeo = new THREE.CapsuleGeometry(0.04, 0.14, 4, 8);
-        const tail = new THREE.Mesh(tailGeo, earMaterial);
-        tail.position.set(0, 0.08, -0.06); 
-        tail.rotation.x = Math.PI / 4; 
-        tail.castShadow = true;
-        this.tailPivot.add(tail);
+        if (this.species === 'cat') {
+            const tailGeo = new THREE.CapsuleGeometry(0.03, 0.3, 4, 8);
+            const tail = new THREE.Mesh(tailGeo, earMaterial);
+            tail.position.set(0, 0.15, -0.1); 
+            tail.rotation.x = Math.PI / 6;
+            tail.castShadow = true;
+            this.tailPivot.add(tail);
+        } else if (this.species === 'dog') {
+            const tailGeo = new THREE.CapsuleGeometry(0.04, 0.14, 4, 8);
+            const tail = new THREE.Mesh(tailGeo, earMaterial);
+            tail.position.set(0, 0.08, -0.06); 
+            tail.rotation.x = Math.PI / 4; 
+            tail.castShadow = true;
+            this.tailPivot.add(tail);
+        } // 햄스터는 꼬리 없음
     }
 
     // 커스터마이징 정보 동기화 (색상 및 귀 타입)
@@ -242,107 +279,99 @@ export class ChibiDog {
         this.rightPointyPivot.visible = !isFloppy;
     }
 
-    setClothes(clothesId) {
-        if (this.equippedClothesMesh) {
-            this.head.remove(this.equippedClothesMesh);
-            this.body.remove(this.equippedClothesMesh);
-            this.equippedClothesMesh = null;
-        }
+    setClothes() {
+        // Remove existing
+        this.equippedClothesMeshes.forEach(mesh => {
+            if (mesh.parent) mesh.parent.remove(mesh);
+        });
+        this.equippedClothesMeshes = [];
 
-        if (!clothesId) return;
+        const clothesList = Array.isArray(gameState.state.equippedClothes) ? gameState.state.equippedClothes : [];
+        if (clothesList.length === 0) return;
 
         const clothesMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
 
-        if (clothesId === "clothes_collar") {
-            clothesMat.color.setHex(0xe74c3c);
-            const scarfGeo = new THREE.TorusGeometry(0.24, 0.04, 8, 16);
-            const scarf = new THREE.Mesh(scarfGeo, clothesMat);
-            scarf.position.set(0, 0.08, 0.16); 
-            scarf.rotation.x = Math.PI / 3;
-            scarf.castShadow = true;
-            this.body.add(scarf);
-            this.equippedClothesMesh = scarf;
-        } 
-        else if (clothesId === "clothes_hat") {
-            clothesMat.color.setHex(0x9b59b6);
-            const hatGroup = new THREE.Group();
-            const hat = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.24, 12), clothesMat);
-            hat.position.set(0, 0.35, 0.0);
-            hat.rotation.x = 0.05;
-            hat.castShadow = true;
-            hatGroup.add(hat);
-
-            const pom = new THREE.Mesh(
-                new THREE.SphereGeometry(0.04, 6, 6),
-                new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.9 })
-            );
-            pom.position.set(0, 0.13, 0);
-            hat.add(pom);
-
-            this.head.add(hatGroup);
-            this.equippedClothesMesh = hatGroup;
-        } 
-        else if (clothesId === "clothes_shirt") {
-            const shirtGeo = new THREE.CapsuleGeometry(0.262, 0.24, 8, 16);
-            shirtGeo.rotateX(Math.PI / 2);
-            const shirtMat = new THREE.MeshStandardMaterial({ color: 0x2ecc71, roughness: 0.95 }); 
-            const shirt = new THREE.Mesh(shirtGeo, shirtMat);
-            shirt.position.set(0, 0.01, 0);
-            shirt.castShadow = true;
-            this.body.add(shirt);
-            this.equippedClothesMesh = shirt;
-        } 
-        else if (clothesId === "clothes_glasses") {
-            const glassesGroup = new THREE.Group();
-            const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
-            const lensMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.85 });
-
-            const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.03), frameMat);
-            bridge.position.set(0, 0.08, 0.22);
-            glassesGroup.add(bridge);
-
-            const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.04), frameMat);
-            frameL.position.set(-0.14, 0.08, 0.22);
-            const lensL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.05), lensMat);
-            lensL.position.set(-0.14, 0.08, 0.22);
-            glassesGroup.add(frameL);
-            glassesGroup.add(lensL);
-
-            const frameR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.04), frameMat);
-            frameR.position.set(0.14, 0.08, 0.22);
-            const lensR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.05), lensMat);
-            lensR.position.set(0.14, 0.08, 0.22);
-            glassesGroup.add(frameR);
-            glassesGroup.add(lensR);
-
-            this.head.add(glassesGroup);
-            this.equippedClothesMesh = glassesGroup;
-        } 
-        else if (clothesId === "clothes_wizard") {
-            clothesMat.color.setHex(0x2c3e50);
-            const hatGroup = new THREE.Group();
-            
-            const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 16), clothesMat);
-            brim.position.set(0, 0.32, 0.0);
-            brim.rotation.x = 0.05;
-            brim.castShadow = true;
-            hatGroup.add(brim);
-
-            const cone = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.24, 12), clothesMat);
-            cone.position.set(0, 0.13, -0.02);
-            cone.rotation.x = -0.15;
-            brim.add(cone);
-
-            const star = new THREE.Mesh(
-                new THREE.DodecahedronGeometry(0.035),
-                new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.5 })
-            );
-            star.position.set(0, 0.08, 0.08);
-            cone.add(star);
-
-            this.head.add(hatGroup);
-            this.equippedClothesMesh = hatGroup;
-        }
+        clothesList.forEach(clothesId => {
+            if (clothesId.includes("collar") || clothesId.includes("ribbon")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0xe74c3c);
+                const scarfGeo = new THREE.TorusGeometry(0.24, 0.04, 8, 16);
+                const scarf = new THREE.Mesh(scarfGeo, mat);
+                scarf.position.set(0, 0.08, 0.16); 
+                scarf.rotation.x = Math.PI / 3;
+                if(this.species === 'hamster') { scarf.scale.set(1.2, 1.2, 1.2); scarf.position.y = 0.0; }
+                scarf.castShadow = true;
+                this.body.add(scarf);
+                this.equippedClothesMeshes.push(scarf);
+            } 
+            else if (clothesId.includes("hat")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0x9b59b6);
+                const hatGroup = new THREE.Group();
+                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.24, 12), mat);
+                hat.position.set(0, 0.35, 0.0);
+                hat.rotation.x = 0.05;
+                if(this.species === 'hamster') { hat.position.y = 0.25; }
+                hat.castShadow = true;
+                hatGroup.add(hat);
+                const pom = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshStandardMaterial({ color: 0xf1c40f, roughness: 0.9 }));
+                pom.position.set(0, 0.13, 0);
+                hat.add(pom);
+                this.head.add(hatGroup);
+                this.equippedClothesMeshes.push(hatGroup);
+            } 
+            else if (clothesId.includes("shirt") || clothesId.includes("cape")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0x2ecc71);
+                const shirtGeo = new THREE.CapsuleGeometry(0.262, 0.24, 8, 16);
+                shirtGeo.rotateX(Math.PI / 2);
+                const shirt = new THREE.Mesh(shirtGeo, mat);
+                shirt.position.set(0, 0.01, 0);
+                if(this.species === 'hamster') { shirt.scale.set(1.1, 1.1, 1.1); }
+                shirt.castShadow = true;
+                this.body.add(shirt);
+                this.equippedClothesMeshes.push(shirt);
+            } 
+            else if (clothesId.includes("glasses")) {
+                const mat = clothesMat.clone();
+                const glassesGroup = new THREE.Group();
+                const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+                const lensMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.85 });
+                const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.03, 0.03), frameMat);
+                bridge.position.set(0, 0.08, 0.22);
+                glassesGroup.add(bridge);
+                const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.04), frameMat);
+                frameL.position.set(-0.14, 0.08, 0.22);
+                const lensL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.05), lensMat);
+                lensL.position.set(-0.14, 0.08, 0.22);
+                glassesGroup.add(frameL); glassesGroup.add(lensL);
+                const frameR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 0.04), frameMat);
+                frameR.position.set(0.14, 0.08, 0.22);
+                const lensR = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 0.05), lensMat);
+                lensR.position.set(0.14, 0.08, 0.22);
+                glassesGroup.add(frameR); glassesGroup.add(lensR);
+                if(this.species === 'hamster') { glassesGroup.scale.set(0.8, 0.8, 0.8); glassesGroup.position.y = -0.05; }
+                this.head.add(glassesGroup);
+                this.equippedClothesMeshes.push(glassesGroup);
+            } 
+            else if (clothesId.includes("wizard") || clothesId.includes("flower")) {
+                const mat = clothesMat.clone();
+                mat.color.setHex(0x2c3e50);
+                const hatGroup = new THREE.Group();
+                const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.02, 16), mat);
+                brim.position.set(0, 0.32, 0.0);
+                brim.rotation.x = 0.05;
+                if(this.species === 'hamster') { brim.position.y = 0.22; }
+                brim.castShadow = true;
+                hatGroup.add(brim);
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.24, 12), mat);
+                cone.position.set(0, 0.13, -0.02);
+                cone.rotation.x = -0.15;
+                brim.add(cone);
+                this.head.add(hatGroup);
+                this.equippedClothesMeshes.push(hatGroup);
+            }
+        });
     }
 
     changeState(newState, targetPos = null) {

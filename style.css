@@ -61,6 +61,8 @@ body, html {
     padding: 30px;
     width: 100%;
     max-width: 440px;
+    max-height: 85vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -227,33 +229,30 @@ body, html {
     box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
 
-.ear-options {
+.ear-options, .species-options {
     display: flex;
-    gap: 8px;
+    gap: 10px;
 }
 
-.ear-btn {
+.ear-btn, .species-btn {
     flex: 1;
-    border: 1px solid rgba(0,0,0,0.08);
-    background: rgba(255,255,255,0.7);
-    outline: none;
     padding: 10px;
-    font-family: inherit;
-    font-size: 0.8rem;
+    border: 2px solid var(--panel-border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.5);
     font-weight: 600;
-    border-radius: 10px;
     cursor: pointer;
     transition: var(--transition);
 }
 
-.ear-btn:hover {
-    background: white;
+.ear-btn.active, .species-btn.active {
+    border-color: var(--primary);
+    background: rgba(255, 123, 144, 0.1);
+    color: var(--primary);
 }
 
-.ear-btn.active {
-    background: var(--text-color);
-    color: white;
-    border-color: var(--text-color);
+.ear-btn:hover, .species-btn:hover {
+    background: white;
 }
 
 .error-msg {
