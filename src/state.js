@@ -47,6 +47,10 @@ const DEFAULT_STATE = {
     isOnline: false
 };
 
+// 세이브 포맷 버전 — 올리면 호환 안 되는 옛 로컬 캐시는 로드 시 자동 폐기되어 빈 화면을 방지
+const SAVE_VERSION = 2;
+const SAVE_KEY = "my_little_puppy_save";
+
 export const SHOP_ITEMS = {
     dog: {
         house: [
@@ -237,41 +241,67 @@ class GameStateManager {
         }
     }
 
-    // 로그인 시 상태 주입
+    // 로그인 시 상태 주입 (클라우드 데이터가 손상돼도 빈 화면이 되지 않도록 정제)
     setLoginSession(username, petState, isOnline = true) {
-        this.state = { 
-            ...DEFAULT_STATE, 
-            ...petState, 
-            username, 
-            isOnline 
-        };
+        this.state = this.sanitizeState({
+            ...DEFAULT_STATE,
+            ...(petState || {}),
+            username,
+            isOnline
+        });
         this.emit("loginSuccess", this.state);
         this.saveState();
+    }
+
+    // 불러온 상태에서 3D 렌더링을 깨뜨릴 수 있는 비정상 값을 정리 (손상 캐시 → 빈 화면 방지)
+    sanitizeState(s) {
+        const validPos = (p) => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+        s.poops = Array.isArray(s.poops) ? s.poops.filter(p => p && p.id && validPos(p.position)) : [];
+        s.trash = Array.isArray(s.trash) ? s.trash.filter(t => t && t.id && validPos(t.position)) : [];
+        s.placedItems = Array.isArray(s.placedItems) ? s.placedItems.filter(i => i && i.itemId && validPos(i.position)) : [];
+        if (s.equippedClothes != null && !Array.isArray(s.equippedClothes)) {
+            s.equippedClothes = (typeof s.equippedClothes === 'string') ? [s.equippedClothes] : [];
+        }
+        ['hunger', 'thirst', 'cleanliness', 'affinityXP'].forEach(k => {
+            if (!Number.isFinite(s[k])) s[k] = DEFAULT_STATE[k];
+        });
+        if (!Number.isFinite(s.affinityLevel) || s.affinityLevel < 1) s.affinityLevel = 1;
+        return s;
     }
 
     // 로그아웃 처리
     logout() {
         this.state = { ...DEFAULT_STATE };
-        localStorage.removeItem("my_little_puppy_save");
+        localStorage.removeItem(SAVE_KEY);
         this.emit("logout", null);
     }
 
     loadState() {
         try {
-            const saved = localStorage.getItem("my_little_puppy_save");
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                this.state = { ...DEFAULT_STATE, ...parsed };
-                
-                // 오프라인 방치 감쇠 계산
-                const offlineTime = Date.now() - this.state.lastSaved;
-                const secondsPassed = Math.floor(offlineTime / 1000);
-                if (secondsPassed > 10) {
-                    this.applyOfflineDecay(secondsPassed);
-                }
+            const saved = localStorage.getItem(SAVE_KEY);
+            if (!saved) return;
+
+            const parsed = JSON.parse(saved);
+
+            // 버전이 다르면(업데이트 후 호환 안 되는 옛 캐시) 폐기하고 새로 시작 → 빈 화면 방지
+            if (parsed.saveVersion !== SAVE_VERSION) {
+                localStorage.removeItem(SAVE_KEY);
+                this.state = { ...DEFAULT_STATE };
+                return;
+            }
+
+            this.state = this.sanitizeState({ ...DEFAULT_STATE, ...parsed });
+
+            // 오프라인 방치 감쇠 계산
+            const offlineTime = Date.now() - this.state.lastSaved;
+            const secondsPassed = Math.floor(offlineTime / 1000);
+            if (secondsPassed > 10) {
+                this.applyOfflineDecay(secondsPassed);
             }
         } catch (e) {
-            console.error("로컬 로드 에러:", e);
+            // 손상된 캐시는 비우고 깨끗하게 새로 시작 (계속 빈 화면이 뜨는 문제 방지)
+            console.error("로컬 로드 에러 — 손상된 캐시를 비우고 새로 시작합니다:", e);
+            try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
             this.state = { ...DEFAULT_STATE };
         }
     }
@@ -279,7 +309,8 @@ class GameStateManager {
     saveState() {
         try {
             this.state.lastSaved = Date.now();
-            localStorage.setItem("my_little_puppy_save", JSON.stringify(this.state));
+            this.state.saveVersion = SAVE_VERSION;
+            localStorage.setItem(SAVE_KEY, JSON.stringify(this.state));
         } catch (e) {
             console.error("로컬 저장 에러:", e);
         }
@@ -866,7 +897,7 @@ class GameStateManager {
 
     resetState() {
         this.state = { ...DEFAULT_STATE, poops: [], placedItems: [], trash: [] };
-        localStorage.removeItem("my_little_puppy_save");
+        localStorage.removeItem(SAVE_KEY);
         this.emit("stateReset", this.state);
         this.emit("notification", "🔄 저장 데이터가 초기화되었습니다.");
         this.saveState();

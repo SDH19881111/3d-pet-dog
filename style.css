@@ -277,6 +277,44 @@ body, html {
     top: 0;
     left: 0;
     z-index: 1;
+    touch-action: none; /* 모바일에서 브라우저 기본 스크롤/줌이 카메라 조작을 가로채지 않게 */
+}
+#canvas-container canvas {
+    touch-action: none;
+    display: block;
+}
+
+/* 선택한 오물 치우기 (모바일 친화 플로팅 버튼) */
+.floating-clean-btn {
+    position: absolute;
+    bottom: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    border: none;
+    outline: none;
+    padding: 12px 22px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: #fff;
+    background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+    border-radius: 999px;
+    box-shadow: 0 8px 22px rgba(20, 184, 166, 0.45);
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.2s ease;
+    animation: cleanPop 0.25s cubic-bezier(0.25, 1.4, 0.5, 1);
+}
+.floating-clean-btn:active {
+    transform: translateX(-50%) scale(0.96);
+}
+.floating-clean-btn.hidden {
+    display: none;
+}
+@keyframes cleanPop {
+    0% { transform: translateX(-50%) scale(0.6); opacity: 0; }
+    100% { transform: translateX(-50%) scale(1); opacity: 1; }
 }
 
 /* UI Overlay Layer */

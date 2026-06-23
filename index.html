@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D 마이 리틀 퍼피 (My Little Puppy)</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -168,6 +168,9 @@
 
         <!-- 알림 메시지 오버레이 -->
         <div id="game-notification" class="game-notification hidden"></div>
+
+        <!-- 선택한 오물(똥/쓰레기) 치우기 버튼 (모바일 친화: 선택 시 표시) -->
+        <button id="btn-clean-selected" class="floating-clean-btn hidden">🧹 선택한 오물 치우기</button>
 
         <!-- 위기 경고 배너 (능력치 0) -->
         <div id="critical-warning" class="critical-warning hidden"></div>

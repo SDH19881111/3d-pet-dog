@@ -66,8 +66,10 @@ let animateErrorLogged = false; // 렌더 루프 오류 1회만 로깅용
 // 이동/선택 모드 (RPG 좌클릭 식): 켜져 있으면 땅 클릭=이동, 물건/오물 클릭=선택·청소
 let interactMode = true;
 let selectedPlacedId = null;   // 현재 선택된 배치 아이템 id
-let selectionIndicator = null; // 선택된 물건 아래 표시되는 링
+let selectionIndicator = null; // 선택된 물건/오물 아래 표시되는 링
 let camAnimating = false;      // 배치 카메라 전환 중에는 팔로우 캠 일시 정지
+let pointerDownInfo = null;    // 탭 vs 드래그 구분용 (모바일 터치 대응)
+let selectedDirt = null;       // 선택된 오물 { kind: 'poop'|'trash', id }
 
 // 마당(땅) 크기 설정 — 기존보다 약 2배 확장
 const YARD_RADIUS = 11;     // 잔디 반지름
@@ -91,10 +93,13 @@ function init() {
     // 3. Renderer 설정
     const container = document.getElementById('canvas-container');
     renderer = new THREE.WebGLRenderer({ antialias: true });
+    // 픽셀비를 먼저 지정한 뒤 크기를 설정해야 모바일 고해상도에서 화면이 일부만 그려지거나(4등분) 깨지는 현상 방지.
+    // 모바일 GPU 메모리 보호를 위해 픽셀비 상한을 2로 제한.
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.touchAction = 'none'; // 터치 제스처가 카메라 조작과 충돌하지 않게
     container.appendChild(renderer.domElement);
 
     // WebGL 컨텍스트 분실 시 자동 복구 (3D 화면이 영구히 사라지는 것 방지)
@@ -178,8 +183,9 @@ function init() {
     setupEventListeners();
     setupAuthListeners();
 
-    // 이동/선택 모드 기본 ON → 십자선 커서
+    // 이동/선택 모드 기본 ON → 십자선 커서 + 카메라 조작 방식 적용
     renderer.domElement.style.cursor = 'crosshair';
+    applyControlMode();
 
     // 로컬 저장소에서 데이터 로드 (새로고침 시 자동 로그인 지원)
     gameState.loadState();
@@ -620,6 +626,7 @@ function getItemEmoji(itemId, category) {
 }
 
 function addItemToScene(itemData) {
+    if (!itemData || !itemData.position || !Number.isFinite(itemData.position.x)) return; // 손상 데이터 방어
     const emoji = getItemEmoji(itemData.itemId, itemData.category);
     const itemMesh = createItemMesh(itemData.itemId, emoji);
     itemMesh.position.set(itemData.position.x, itemData.position.y, itemData.position.z);
@@ -637,6 +644,7 @@ function addItemToScene(itemData) {
 }
 
 function addPoopToScene(poopData) {
+    if (!poopData || !poopData.position || !Number.isFinite(poopData.position.x)) return; // 손상 데이터 방어
     const poopMesh = createPoopMesh();
     poopMesh.position.set(poopData.position.x, poopData.position.y, poopData.position.z);
     
@@ -651,6 +659,7 @@ function addPoopToScene(poopData) {
 
 // 신규 추가: 마당에 쓰레기 3D 추가 및 낙하 애니메이션 세팅
 function addTrashToScene(trashData) {
+    if (!trashData || !trashData.position || !Number.isFinite(trashData.position.x)) return; // 손상 데이터 방어
     const trashMesh = createTrashMesh(trashData.type);
     
     // y좌표는 낙하 효과를 위해 하늘 위 3.5m로 세팅
@@ -671,8 +680,19 @@ function addTrashToScene(trashData) {
 // --- 이벤트 바인딩 ---
 function setupEventListeners() {
     window.addEventListener('resize', onWindowResize);
+    window.addEventListener('orientationchange', () => setTimeout(onWindowResize, 250)); // 모바일 회전 대응
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', () => { pointerDownInfo = null; });
+
+    // 선택한 오물(똥/쓰레기) 치우기 버튼
+    document.getElementById('btn-clean-selected').addEventListener('click', () => {
+        if (!selectedDirt) return;
+        if (selectedDirt.kind === 'poop') gameState.cleanPoop(selectedDirt.id);
+        else gameState.cleanTrash(selectedDirt.id);
+        clearDirtSelection();
+    });
 
     // 탭을 벗어났다 돌아올 때, 백그라운드 동안 누적된 큰 시간차를 버려 첫 프레임 폭주(화면 깨짐) 방지
     document.addEventListener('visibilitychange', () => {
@@ -1167,18 +1187,35 @@ function toggleInteractMode(force = null) {
     if (interactMode) {
         btn.classList.add('active');
         renderer.domElement.style.cursor = 'crosshair';
-        showNotification("🖱️ 이동/선택 모드 ON — 땅을 클릭하면 이동, 똥·쓰레기·물건을 클릭하면 청소/선택돼요.");
+        showNotification("🖱️ 이동/선택 모드 ON — 땅을 탭하면 이동, 똥·쓰레기·물건을 탭하면 선택돼요. (카메라는 펫을 따라가요)");
     } else {
         btn.classList.remove('active');
         renderer.domElement.style.cursor = 'grab';
         selectionIndicator.visible = false;
         selectedPlacedId = null;
-        showNotification("🔄 이동/선택 모드 OFF — 이제 화면을 자유롭게 돌려보며 구경할 수 있어요.");
+        clearDirtSelection();
+        showNotification("🔄 이동/선택 모드 OFF — 화면을 손가락(또는 마우스)으로 끌면 자유롭게 이동돼요.");
+    }
+    applyControlMode();
+}
+
+// 이동/선택 모드에 따라 카메라 조작 방식을 전환
+//  ON  : 한 손가락=회전, 팔로우 캠으로 펫을 따라감
+//  OFF : 한 손가락=화면 이동(PAN), 팔로우 캠 꺼서 수동 이동 위치 유지 (모바일에서 화면 옮기기 쉬움)
+function applyControlMode() {
+    if (!controls) return;
+    if (interactMode) {
+        controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    } else {
+        controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     }
 }
 
 // 배치된 물건을 선택 표시 (이동/선택 모드)
 function selectPlacedItem(obj) {
+    clearDirtSelection();
     selectionIndicator.position.set(obj.position.x, 0.03, obj.position.z);
     selectionIndicator.visible = true;
     selectedPlacedId = obj.userData.placedId;
@@ -1219,9 +1256,14 @@ function onPointerDown(event) {
     // UI 위를 누른 것은 예외
     if (event.target.closest('#ui-container') || event.target.closest('#auth-overlay')) return;
 
+    // 탭(짧게 누름) vs 드래그(카메라 이동) 구분을 위해 시작 좌표 기록
+    pointerDownInfo = { x: event.clientX, y: event.clientY, edit: isEditMode };
+
+    // 인게임 상호작용은 손을 뗄 때(onPointerUp) '탭'으로만 처리 → 드래그는 카메라 이동/회전에 양보
+    if (!isEditMode) return;
+
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
     raycaster.setFromCamera(mouse, camera);
 
     if (isEditMode) {
@@ -1261,12 +1303,18 @@ function onPointerDown(event) {
                 }
             }
         }
-    } else {
-        // --- 인게임 일반 상호작용 클릭 (이동/선택 모드일 때만) ---
-        if (!interactMode) return; // 모드 OFF면 화면 회전/줌만, 게임 상호작용은 무시
+    }
+}
 
-        const intersects = raycaster.intersectObjects(scene.children, true);
+// 손을 뗄 때 '탭'으로 판정되면 호출되는 인게임 상호작용 (모바일 터치/PC 클릭 공통)
+function performGameTap(clientX, clientY) {
+    mouse.x = (clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
 
+    const intersects = raycaster.intersectObjects(scene.children, true);
+
+    {
         // 1. 강아지 터치
         const hitDog = intersects.some(i => {
             let p = i.object;
@@ -1301,7 +1349,7 @@ function onPointerDown(event) {
         if (hitPoop) {
             let poopObj = hitPoop.object;
             while (poopObj && !poopObj.userData.isPoop) poopObj = poopObj.parent;
-            gameState.cleanPoop(poopObj.userData.poopId);
+            selectDirt('poop', poopObj.userData.poopId, poopObj.position);
             return;
         }
 
@@ -1318,7 +1366,7 @@ function onPointerDown(event) {
         if (hitTrash) {
             let trashObj = hitTrash.object;
             while (trashObj && !trashObj.userData.isTrash) trashObj = trashObj.parent;
-            gameState.cleanTrash(trashObj.userData.trashId);
+            selectDirt('trash', trashObj.userData.trashId, trashObj.position);
             return;
         }
 
@@ -1346,10 +1394,45 @@ function onPointerDown(event) {
             if (point.x * point.x + point.z * point.z < MOVE_RADIUS * MOVE_RADIUS) {
                 selectionIndicator.visible = false; // 이동 시 선택 해제
                 selectedPlacedId = null;
+                clearDirtSelection();
                 dog.changeState('walk', new THREE.Vector3(point.x, 0.4, point.z));
             }
         }
     }
+}
+
+// 손가락/마우스를 뗄 때: 거의 안 움직였으면 '탭'으로 보고 게임 상호작용 실행
+function onPointerUp(event) {
+    const info = pointerDownInfo;
+    pointerDownInfo = null;
+    if (!info || info.edit) return;   // 배치 모드는 누를 때 이미 처리됨
+    if (!interactMode) return;        // 이동/선택 OFF면 상호작용 안 함 (카메라 이동 전용)
+    const moved = Math.hypot(event.clientX - info.x, event.clientY - info.y);
+    if (moved > 12) return;           // 12px 이상 움직였으면 드래그(카메라 조작)로 간주
+    performGameTap(event.clientX, event.clientY);
+}
+
+// 오물(똥/쓰레기) 선택: 링 + 치우기 버튼 표시 (모바일에서 정확히 탭하기 어려운 점 보완)
+function selectDirt(kind, id, position) {
+    selectedDirt = { kind, id };
+    selectedPlacedId = null;
+    if (position) {
+        selectionIndicator.position.set(position.x, 0.03, position.z);
+        selectionIndicator.visible = true;
+    }
+    const btn = document.getElementById('btn-clean-selected');
+    if (btn) btn.classList.remove('hidden');
+    showNotification(kind === 'poop'
+        ? "💩 똥을 선택했어요. 아래 [치우기] 버튼을 누르세요!"
+        : "🗑️ 쓰레기를 선택했어요. 아래 [치우기] 버튼을 누르세요!");
+}
+
+// 오물 선택 해제 + 치우기 버튼 숨김
+function clearDirtSelection() {
+    selectedDirt = null;
+    const btn = document.getElementById('btn-clean-selected');
+    if (btn) btn.classList.add('hidden');
+    if (!selectedPlacedId) selectionIndicator.visible = false;
 }
 
 function handleDogAutonomy() {
@@ -1500,8 +1583,8 @@ function animate() {
         dog.update(deltaTime, time);
     }
 
-    // 1.5 팔로우 캠: 펫이 이동하면 카메라가 부드럽게 따라감 (배치/전환 중에는 정지)
-    if (dog && dog.group && !isEditMode && !camAnimating && controls) {
+    // 1.5 팔로우 캠: 펫이 이동하면 카메라가 부드럽게 따라감 (배치/전환 중·이동선택 OFF면 정지)
+    if (dog && dog.group && !isEditMode && !camAnimating && interactMode && controls) {
         const dogPos = new THREE.Vector3();
         dog.group.getWorldPosition(dogPos);
         const desired = new THREE.Vector3(dogPos.x, 0.4, dogPos.z);
