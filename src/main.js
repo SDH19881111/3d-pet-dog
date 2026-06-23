@@ -202,6 +202,10 @@ function init() {
     setInterval(handleWeatherCycle, 90000);
     // 실시간 쓰레기 생성 스케줄 가동 (18초마다 확률 검사)
     setInterval(handleTrashSpawnCycle, 18000);
+
+    // 모바일 4등분/깨짐 방지: 레이아웃 안정 후 렌더러 크기 재보정 + 뷰포트 변화 추적
+    bindViewportResize();
+    refreshRendererSize();
 }
 
 // 마당 잔디 및 나무들
@@ -909,9 +913,26 @@ function setupEventListeners() {
 
 // 윈도우 리사이즈
 function onWindowResize() {
+    if (!camera || !renderer) return;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// 모바일에서 초기 렌더가 '레이아웃/픽셀비가 확정되기 전' 크기로 그려져 화면이 4등분/깨지는 현상 방지.
+// 레이아웃이 안정될 때까지 여러 시점에 렌더러 크기를 다시 맞춘다(eruda 콘솔이 우연히 해주던 보정을 코드로 보장).
+function refreshRendererSize() {
+    requestAnimationFrame(onWindowResize);
+    [60, 250, 600, 1200].forEach(ms => setTimeout(onWindowResize, ms));
+}
+
+// 모바일 주소창 노출/숨김 등 뷰포트 변화도 추적 (한 번만 바인딩)
+function bindViewportResize() {
+    window.addEventListener('load', onWindowResize);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', onWindowResize);
+    }
 }
 
 // --- 사용자 계정 시스템 UI 제어 ---
@@ -986,6 +1007,7 @@ function setupAuthListeners() {
                 uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
+                refreshRendererSize(); // 게임 화면이 드러난 직후 렌더러 크기 재보정 (4등분 방지)
                 showNotification(`👋 환영합니다! ${data.username}님, ${gameState.speciesName()} ${data.petState.petName}와 좋은 시간 보내세요!`);
             } else {
                 errorMsg.textContent = data.error || "로그인 실패";
@@ -1002,6 +1024,7 @@ function setupAuthListeners() {
                 uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(username, { petName: "임시바둑이", furColor: "#ffcc80", earType: "floppy" }, false);
                 syncStateTo3D();
+                refreshRendererSize();
             }, 1000);
         }
     });
@@ -1041,6 +1064,7 @@ function setupAuthListeners() {
                 uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
+                refreshRendererSize(); // 게임 화면이 드러난 직후 렌더러 크기 재보정 (4등분 방지)
                 showNotification(`🎉 성공적으로 입양되었습니다! 마당에서 ${gameState.speciesName()} ${petName}를 반겨주세요!`);
             } else {
                 errorMsg.textContent = data.error || "회원가입 실패";
@@ -1057,6 +1081,7 @@ function setupAuthListeners() {
                 const localPetState = { petName, furColor, earType, species };
                 gameState.setLoginSession(username, localPetState, false);
                 syncStateTo3D();
+                refreshRendererSize();
             }, 1200);
         }
     });

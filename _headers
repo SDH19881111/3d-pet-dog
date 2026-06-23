@@ -1,4 +1,7 @@
 # 핵심 파일은 항상 최신본을 받도록 캐시를 무력화 (구버전 캐시로 인한 빈 화면 방지)
+# 루트(/)는 /index.html 패턴과 매칭되지 않으므로 별도로 지정해야 함
+/
+  Cache-Control: no-cache, no-store, must-revalidate
 /index.html
   Cache-Control: no-cache, no-store, must-revalidate
 /style.css
