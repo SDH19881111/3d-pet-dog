@@ -241,6 +241,12 @@ class GameStateManager {
         }
     }
 
+    // 현재 종족의 한글 표시 이름 (모든 종족 이름이 모음으로 끝나 조사 가/를/의/와 호환)
+    speciesName() {
+        const names = { dog: "강아지", cat: "고양이", hamster: "햄스터" };
+        return names[this.state.species] || "반려동물";
+    }
+
     // 로그인 시 상태 주입 (클라우드 데이터가 손상돼도 빈 화면이 되지 않도록 정제)
     setLoginSession(username, petState, isOnline = true) {
         this.state = this.sanitizeState({
@@ -536,9 +542,9 @@ class GameStateManager {
         let weatherMsg = "";
         switch (weather) {
             case "clear": weatherMsg = "☀️ 하늘이 맑아졌습니다. 마당이 아주 화창합니다!"; break;
-            case "rain": weatherMsg = "🌧️ 비바람이 치기 시작합니다! 강아지의 청결도가 빠르게 닳습니다."; break;
-            case "heatwave": weatherMsg = "🥵 찌는 폭염이 찾아왔습니다! 강아지가 더워하니 물을 자주 주세요."; break;
-            case "wind": weatherMsg = "💨 강풍이 몰아칩니다! 강아지의 포만감이 빠르게 소모됩니다."; break;
+            case "rain": weatherMsg = `🌧️ 비바람이 치기 시작합니다! ${this.speciesName()}의 청결도가 빠르게 닳습니다.`; break;
+            case "heatwave": weatherMsg = `🥵 찌는 폭염이 찾아왔습니다! ${this.speciesName()}가 더워하니 물을 자주 주세요.`; break;
+            case "wind": weatherMsg = `💨 강풍이 몰아칩니다! ${this.speciesName()}의 포만감이 빠르게 소모됩니다.`; break;
         }
 
         this.emit("weatherChanged", weather);
@@ -558,7 +564,7 @@ class GameStateManager {
 
         if (this.state.dailyPetCount >= 5) {
             this.emit("petAction", { gainedXP: false });
-            this.emit("notification", "🐶 강아지가 행복해하지만, 오늘 호감도는 충분히 올랐습니다! (최대 5회)");
+            this.emit("notification", `🐶 ${this.speciesName()}가 행복해하지만, 오늘 호감도는 충분히 올랐습니다! (최대 5회)`);
             return;
         }
 
@@ -566,7 +572,7 @@ class GameStateManager {
         this.gainAffinityXP(8);
         this.state.cleanliness = Math.max(0, this.state.cleanliness - 0.5);
         this.emit("petAction", { gainedXP: true });
-        this.emit("notification", `👋 강아지를 부드럽게 쓰다듬었습니다! (${this.state.dailyPetCount}/5)`);
+        this.emit("notification", `👋 ${this.speciesName()}를 부드럽게 쓰다듬었습니다! (${this.state.dailyPetCount}/5)`);
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
     }
@@ -575,7 +581,7 @@ class GameStateManager {
         this.state.hunger = Math.min(100, this.state.hunger + 30);
         this.gainAffinityXP(1.5);
         this.emit("feedAction", null);
-        this.emit("notification", "🍖 강아지가 밥을 맛있게 먹습니다!");
+        this.emit("notification", `🍖 ${this.speciesName()}가 밥을 맛있게 먹습니다!`);
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
     }
@@ -584,7 +590,7 @@ class GameStateManager {
         this.state.thirst = Math.min(100, this.state.thirst + 35);
         this.gainAffinityXP(1.5);
         this.emit("waterAction", null);
-        this.emit("notification", "💧 강아지가 물을 시원하게 마십니다!");
+        this.emit("notification", `💧 ${this.speciesName()}가 물을 시원하게 마십니다!`);
         this.saveState();
         if (this.state.isOnline) this.saveToCloud();
     }
@@ -714,7 +720,7 @@ class GameStateManager {
         this.state.poops.push(newPoop);
         this.updateCleanliness();
         this.emit("poopSpawned", newPoop);
-        this.emit("notification", "💩 강아지가 마당에 똥을 쌌습니다! 치워주세요.");
+        this.emit("notification", `💩 ${this.speciesName()}가 마당에 똥을 쌌습니다! 치워주세요.`);
         this.saveState();
     }
 
@@ -736,7 +742,7 @@ class GameStateManager {
             this.updateCleanliness();
             this.gainAffinityXP(4); 
             this.emit("poopCleaned", cleaned.id);
-            this.emit("notification", "🧹 강아지 똥을 깨끗하게 치워주었습니다!");
+            this.emit("notification", `🧹 ${this.speciesName()} 똥을 깨끗하게 치워주었습니다!`);
             this.saveState();
             if (this.state.isOnline) this.saveToCloud();
         }

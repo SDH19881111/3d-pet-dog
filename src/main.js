@@ -737,7 +737,7 @@ function setupEventListeners() {
 
     document.getElementById('btn-water').addEventListener('click', () => {
         if (dog.state === 'sleep') {
-            gameState.emit("notification", "💤 강아지가 잠들었을 때는 물을 주지 마세요.");
+            gameState.emit("notification", `💤 ${gameState.speciesName()}가 잠들었을 때는 물을 주지 마세요.`);
             return;
         }
         const bowls = gameState.state.placedItems.filter(i => i.category === 'bowl');
@@ -758,7 +758,7 @@ function setupEventListeners() {
 
     document.getElementById('btn-walk').addEventListener('click', () => {
         if (dog.state === 'sleep') {
-            gameState.emit("notification", "💤 강아지를 먼저 깨우고 산책을 출발합시다!");
+            gameState.emit("notification", `💤 ${gameState.speciesName()}를 먼저 깨우고 산책을 출발합시다!`);
             return;
         }
         if (dog.state === 'walk_action') return; 
@@ -986,7 +986,7 @@ function setupAuthListeners() {
                 uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
-                showNotification(`👋 환영합니다! ${data.username}님, 강아지 ${data.petState.petName}와 좋은 시간 보내세요!`);
+                showNotification(`👋 환영합니다! ${data.username}님, ${gameState.speciesName()} ${data.petState.petName}와 좋은 시간 보내세요!`);
             } else {
                 errorMsg.textContent = data.error || "로그인 실패";
                 errorMsg.classList.remove('hidden');
@@ -1041,7 +1041,7 @@ function setupAuthListeners() {
                 uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
-                showNotification(`🎉 성공적으로 입양되었습니다! 마당에서 강아지 ${petName}를 반겨주세요!`);
+                showNotification(`🎉 성공적으로 입양되었습니다! 마당에서 ${gameState.speciesName()} ${petName}를 반겨주세요!`);
             } else {
                 errorMsg.textContent = data.error || "회원가입 실패";
                 errorMsg.classList.remove('hidden');
