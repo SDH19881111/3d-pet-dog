@@ -386,9 +386,15 @@ export class ChibiPet {
     }
 
     setClothes() {
-        // Remove existing
+        // Remove existing (GPU 누수 방지를 위해 지오메트리/머티리얼도 정리)
         this.equippedClothesMeshes.forEach(mesh => {
             if (mesh.parent) mesh.parent.remove(mesh);
+            mesh.traverse((child) => {
+                if (child.geometry && child.geometry.dispose) child.geometry.dispose();
+                const m = child.material;
+                if (Array.isArray(m)) m.forEach(mm => mm && mm.dispose && mm.dispose());
+                else if (m && m.dispose) m.dispose();
+            });
         });
         this.equippedClothesMeshes = [];
 

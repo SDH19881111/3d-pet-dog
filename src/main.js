@@ -61,6 +61,7 @@ const uiContainer = document.getElementById('ui-container');
 
 // 배치 상태 모드
 let isEditMode = false;
+let animateErrorLogged = false; // 렌더 루프 오류 1회만 로깅용
 
 // 이동/선택 모드 (RPG 좌클릭 식): 켜져 있으면 땅 클릭=이동, 물건/오물 클릭=선택·청소
 let interactMode = true;
@@ -95,6 +96,16 @@ function init() {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
+
+    // WebGL 컨텍스트 분실 시 자동 복구 (3D 화면이 영구히 사라지는 것 방지)
+    renderer.domElement.addEventListener('webglcontextlost', (e) => {
+        e.preventDefault(); // 기본 동작을 막아야 복구(restored) 이벤트가 발생함
+        showNotification('⚠️ 그래픽이 일시적으로 끊겼어요. 자동으로 복구하는 중...');
+    }, false);
+    renderer.domElement.addEventListener('webglcontextrestored', () => {
+        if (gameState.state.username) syncStateTo3D();
+        showNotification('✅ 화면을 다시 복구했어요!');
+    }, false);
 
     // 4. Controls 설정
     controls = new OrbitControls(camera, renderer.domElement);
@@ -415,6 +426,22 @@ function buildHeatwaveSystem() {
     scene.add(heatWaves);
 }
 
+// 3D 오브젝트의 지오메트리/머티리얼/텍스처를 정리해 GPU 메모리 누수 방지
+// (장시간 플레이 시 누수가 쌓이면 WebGL 컨텍스트가 분실되어 화면이 사라질 수 있음)
+function disposeObject3D(obj) {
+    if (!obj) return;
+    const geos = new Set();
+    const mats = new Set();
+    obj.traverse((child) => {
+        if (child.geometry) geos.add(child.geometry);
+        const m = child.material;
+        if (Array.isArray(m)) m.forEach(mm => mm && mats.add(mm));
+        else if (m) mats.add(m);
+    });
+    geos.forEach(g => { if (g.dispose) g.dispose(); });
+    mats.forEach(m => { if (m.map && m.map.dispose) m.map.dispose(); if (m.dispose) m.dispose(); });
+}
+
 // --- 게임 상태와 3D 화면 동기화 ---
 function syncStateTo3D() {
     const state = gameState.state;
@@ -424,6 +451,7 @@ function syncStateTo3D() {
     // 펫 3D 모델 재현 (종족이 변경되었을 수 있으므로 다시 생성)
     if (dog && dog.group) {
         scene.remove(dog.group);
+        disposeObject3D(dog.group);
     }
     dog = new ChibiPet(scene);
     
@@ -433,6 +461,7 @@ function syncStateTo3D() {
     // 가구 동기화
     Object.keys(placed3DItems).forEach(id => {
         scene.remove(placed3DItems[id]);
+        disposeObject3D(placed3DItems[id]);
         delete placed3DItems[id];
     });
     state.placedItems.forEach(item => {
@@ -442,6 +471,7 @@ function syncStateTo3D() {
     // 똥 동기화
     Object.keys(poops3D).forEach(id => {
         scene.remove(poops3D[id]);
+        disposeObject3D(poops3D[id]);
         delete poops3D[id];
     });
     state.poops.forEach(poop => {
@@ -451,6 +481,7 @@ function syncStateTo3D() {
     // 신규 추가: 쓰레기 동기화
     Object.keys(trash3D).forEach(id => {
         scene.remove(trash3D[id]);
+        disposeObject3D(trash3D[id]);
         delete trash3D[id];
     });
     state.trash.forEach(trash => {
@@ -643,6 +674,11 @@ function setupEventListeners() {
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
 
+    // 탭을 벗어났다 돌아올 때, 백그라운드 동안 누적된 큰 시간차를 버려 첫 프레임 폭주(화면 깨짐) 방지
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && clock) clock.getDelta();
+    });
+
     document.getElementById('btn-pet').addEventListener('click', () => {
         gameState.state.isResting = false;
         if (dog.state === 'sleep') {
@@ -802,6 +838,7 @@ function setupEventListeners() {
     gameState.subscribe('poopCleaned', (poopId) => {
         if (poops3D[poopId]) {
             scene.remove(poops3D[poopId]);
+            disposeObject3D(poops3D[poopId]);
             delete poops3D[poopId];
         }
     });
@@ -812,6 +849,7 @@ function setupEventListeners() {
     gameState.subscribe('trashCleaned', (trashId) => {
         if (trash3D[trashId]) {
             scene.remove(trash3D[trashId]);
+            disposeObject3D(trash3D[trashId]);
             delete trash3D[trashId];
         }
     });
@@ -821,6 +859,7 @@ function setupEventListeners() {
     gameState.subscribe('itemRemoved', (placedId) => {
         if (placed3DItems[placedId]) {
             scene.remove(placed3DItems[placedId]);
+            disposeObject3D(placed3DItems[placedId]);
             delete placed3DItems[placedId];
         }
     });
@@ -1450,6 +1489,7 @@ function showCelebrationEffect() {
 function animate() {
     requestAnimationFrame(animate);
 
+    try {
     // 탭 비활성화 시 deltaTime이 너무 커지면 lerp에서 폭주하여 렌더링이 깨지는 현상(화면 사라짐) 방지
     const rawDelta = clock.getDelta();
     const deltaTime = Math.min(rawDelta, 0.05);
@@ -1606,12 +1646,28 @@ function animate() {
         }
     });
 
-    // 7. 카메라 및 렌더러 루프
-    if (controls) {
+    // 7. 카메라 NaN/이상값 방어 후 갱신
+    if (camera && controls) {
+        const cp = camera.position, ct = controls.target;
+        if (![cp.x, cp.y, cp.z, ct.x, ct.y, ct.z].every(Number.isFinite)) {
+            // 팔로우 캠/보간이 비정상 값이 되면 안전한 기본 시점으로 복구 (화면 사라짐 방지)
+            camera.position.set(0, 5.5, 7.5);
+            controls.target.set(0, 0.4, 0);
+        }
         controls.update();
     }
+    } catch (err) {
+        // 한 프레임의 오류가 3D 화면을 영구히 죽이지 않도록 흡수 (최초 1회만 기록)
+        if (!animateErrorLogged) {
+            console.error('[animate] 루프 오류 — 렌더는 계속 진행합니다:', err);
+            animateErrorLogged = true;
+        }
+    }
 
-    renderer.render(scene, camera);
+    // 어떤 상황에서도 마지막엔 반드시 렌더링하여 3D 화면이 사라지지 않게 함
+    try {
+        if (renderer && scene && camera) renderer.render(scene, camera);
+    } catch (e) { /* 컨텍스트 분실 등 일시적 오류는 무시하고 다음 프레임 재시도 */ }
 }
 
 init();
