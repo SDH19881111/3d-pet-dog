@@ -1623,6 +1623,17 @@ function animate() {
     const deltaTime = Math.min(rawDelta, 0.05);
     const time = clock.getElapsedTime();
 
+    // 0. 캬버스 크기 자동 보정: 모바일 첫 로드 시 뷰포트가 안정화되기 전에 렌더러가
+    // 작은 크기로 설정되는 문제를 매 프레임 감지하여 자동 보정
+    const canvas = renderer.domElement;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (canvas.clientWidth !== w || canvas.clientHeight !== h) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    }
+
     // 1. 강아지 업데이트
     if (dog) {
         dog.update(deltaTime, time);
@@ -1798,4 +1809,10 @@ function animate() {
     } catch (e) { /* 컨텍스트 분실 등 일시적 오류는 무시하고 다음 프레임 재시도 */ }
 }
 
-init();
+// 모바일에서 DOM 파싱은 끝났지만 뷰포트 레이아웃이 아직 확정되지 않은 상태에서
+// init()이 실행되면 렌더러 크기가 작게 설정됨. 레이아웃 안정 후 실행 보장.
+if (document.readyState === 'complete') {
+    init();
+} else {
+    window.addEventListener('load', init, { once: true });
+}
