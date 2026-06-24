@@ -193,7 +193,7 @@ function init() {
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('ui-container').classList.remove('hidden');
         syncStateTo3D();
-        updateStatusUI();
+        updateUIBars();
     }
 
     animate();
