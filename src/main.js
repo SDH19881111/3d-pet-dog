@@ -69,6 +69,7 @@ let animateErrorLogged = false; // 렌더 루프 오류 1회만 로깅용
 
 // 이동/선택 모드 (RPG 좌클릭 식): 켜져 있으면 땅 클릭=이동, 물건/오물 클릭=선택·청소
 let interactMode = true;
+let tapMode = 'move'; // 'move'=땅 탭 시 펫 이동 / 'select'=똥·쓰레기·물건 탭 시 선택 (interactMode가 true일 때만 의미)
 let selectedPlacedId = null;   // 현재 선택된 배치 아이템 id
 let selectionIndicator = null; // 선택된 물건/오물 아래 표시되는 링
 let camAnimating = false;      // 배치 카메라 전환 중에는 팔로우 캠 일시 정지
@@ -788,7 +789,25 @@ function setupEventListeners() {
     });
 
     // 이동/선택 모드 토글 (RPG 좌클릭 식)
-    document.getElementById('btn-interact').addEventListener('click', () => toggleInteractMode());
+    document.getElementById('btn-move').addEventListener('click', () => {
+        if (interactMode && tapMode === 'move') {
+            setInteraction('camera');
+            showNotification("🔄 화면 이동 모드 — 손가락(마우스)으로 끌어 화면을 자유롭게 움직이세요.");
+        } else {
+            setInteraction('move');
+            showNotification("🐾 이동 모드 — 땅을 탭하면 펫이 그쪽으로 걸어가요.");
+        }
+    });
+    document.getElementById('btn-select').addEventListener('click', () => {
+        if (interactMode && tapMode === 'select') {
+            setInteraction('camera');
+            showNotification("🔄 화면 이동 모드 — 손가락(마우스)으로 끌어 화면을 자유롭게 움직이세요.");
+        } else {
+            setInteraction('select');
+            showNotification("👆 선택 모드 — 똥·쓰레기·설치한 물건을 탭해 선택/정리하세요.");
+        }
+    });
+    updateModeButtons();
 
     document.getElementById('btn-wash').addEventListener('click', () => {
         if (dog.state === 'sleep') {
@@ -1229,23 +1248,33 @@ function gsapToCameraTarget(targetPos, camPos) {
 }
 
 // 이동/선택 모드 토글 (RPG 좌클릭 식 상호작용 on/off)
-function toggleInteractMode(force = null) {
-    interactMode = (force !== null) ? force : !interactMode;
-    const btn = document.getElementById('btn-interact');
-
-    if (interactMode) {
-        btn.classList.add('active');
-        renderer.domElement.style.cursor = 'crosshair';
-        showNotification("🖱️ 이동/선택 모드 ON — 땅을 탭하면 이동, 똥·쓰레기·물건을 탭하면 선택돼요. (카메라는 펫을 따라가요)");
+// 상호작용 모드 설정: 'move'(땅 탭=펫 이동) / 'select'(물건·오물 탭=선택) / 'camera'(화면 이동만)
+function setInteraction(mode) {
+    if (mode === 'camera') {
+        interactMode = false;
     } else {
-        btn.classList.remove('active');
-        renderer.domElement.style.cursor = 'grab';
+        interactMode = true;
+        tapMode = mode; // 'move' | 'select'
+    }
+
+    if (!interactMode) {
+        // 화면 이동 모드로 가면 선택 상태 해제
         selectionIndicator.visible = false;
         selectedPlacedId = null;
         clearDirtSelection();
-        showNotification("🔄 이동/선택 모드 OFF — 화면을 손가락(또는 마우스)으로 끌면 자유롭게 이동돼요.");
     }
+
+    renderer.domElement.style.cursor = interactMode ? 'crosshair' : 'grab';
+    updateModeButtons();
     applyControlMode();
+}
+
+// 이동/선택 버튼의 활성 표시 갱신
+function updateModeButtons() {
+    const bm = document.getElementById('btn-move');
+    const bs = document.getElementById('btn-select');
+    if (bm) bm.classList.toggle('active', interactMode && tapMode === 'move');
+    if (bs) bs.classList.toggle('active', interactMode && tapMode === 'select');
 }
 
 // 이동/선택 모드에 따라 카메라 조작 방식을 전환
@@ -1363,38 +1392,33 @@ function performGameTap(clientX, clientY) {
 
     const intersects = raycaster.intersectObjects(scene.children, true);
 
-    {
-        // 1. 강아지 터치
-        const hitDog = intersects.some(i => {
-            let p = i.object;
-            while (p) {
-                if (p === dog.group) return true;
-                p = p.parent;
-            }
-            return false;
-        });
-
-        if (hitDog) {
-            if (dog.state === 'sleep') {
-                gameState.state.isResting = false;
-                gameState.disturbSleep(); // 클릭으로 깨우기 = 잦은 방해 카운트
-                dog.changeState('idle');
-            } else {
-                gameState.pet();
-            }
-            return;
+    // 강아지 터치 → 쓰다듬기/깨우기 (이동·선택 모드 공통)
+    const hitDog = intersects.some(i => {
+        let p = i.object;
+        while (p) {
+            if (p === dog.group) return true;
+            p = p.parent;
         }
+        return false;
+    });
+    if (hitDog) {
+        if (dog.state === 'sleep') {
+            gameState.state.isResting = false;
+            gameState.disturbSleep(); // 클릭으로 깨우기 = 잦은 방해 카운트
+            dog.changeState('idle');
+        } else {
+            gameState.pet();
+        }
+        return;
+    }
 
-        // 2. 똥 터치 (개별 치우기)
+    if (tapMode === 'select') {
+        // === 선택 모드: 똥·쓰레기·설치한 물건만 선택 (펫은 이동하지 않음) ===
         const hitPoop = intersects.find(i => {
             let p = i.object;
-            while (p && p !== scene) {
-                if (p.userData && p.userData.isPoop) return true;
-                p = p.parent;
-            }
+            while (p && p !== scene) { if (p.userData && p.userData.isPoop) return true; p = p.parent; }
             return false;
         });
-
         if (hitPoop) {
             let poopObj = hitPoop.object;
             while (poopObj && !poopObj.userData.isPoop) poopObj = poopObj.parent;
@@ -1402,16 +1426,11 @@ function performGameTap(clientX, clientY) {
             return;
         }
 
-        // 3. 쓰레기 터치 (개별 줍기)
         const hitTrash = intersects.find(i => {
             let p = i.object;
-            while (p && p !== scene) {
-                if (p.userData && p.userData.isTrash) return true;
-                p = p.parent;
-            }
+            while (p && p !== scene) { if (p.userData && p.userData.isTrash) return true; p = p.parent; }
             return false;
         });
-
         if (hitTrash) {
             let trashObj = hitTrash.object;
             while (trashObj && !trashObj.userData.isTrash) trashObj = trashObj.parent;
@@ -1419,16 +1438,11 @@ function performGameTap(clientX, clientY) {
             return;
         }
 
-        // 4. 배치된 물건 터치 (선택)
         const hitItem = intersects.find(i => {
             let p = i.object;
-            while (p && p !== scene) {
-                if (p.userData && p.userData.isPlacedItem) return true;
-                p = p.parent;
-            }
+            while (p && p !== scene) { if (p.userData && p.userData.isPlacedItem) return true; p = p.parent; }
             return false;
         });
-
         if (hitItem) {
             let itemObj = hitItem.object;
             while (itemObj && !(itemObj.userData && itemObj.userData.isPlacedItem)) itemObj = itemObj.parent;
@@ -1436,16 +1450,25 @@ function performGameTap(clientX, clientY) {
             return;
         }
 
-        // 5. 마당 빈 땅 터치 (해당 지점으로 이동)
+        // 빈 땅 탭 → 선택 해제 (이동하지 않음)
         const hitGround = raycaster.intersectObject(groundPlane);
-        if (hitGround.length > 0 && dog.state !== 'sleep' && dog.state !== 'walk_action') {
-            const point = hitGround[0].point;
-            if (point.x * point.x + point.z * point.z < MOVE_RADIUS * MOVE_RADIUS) {
-                selectionIndicator.visible = false; // 이동 시 선택 해제
-                selectedPlacedId = null;
-                clearDirtSelection();
-                dog.changeState('walk', new THREE.Vector3(point.x, 0.4, point.z));
-            }
+        if (hitGround.length > 0) {
+            selectionIndicator.visible = false;
+            selectedPlacedId = null;
+            clearDirtSelection();
+        }
+        return;
+    }
+
+    // === 이동 모드: 빈 땅 탭 → 펫이 그쪽으로 이동 (똥·쓰레기·물건은 무시) ===
+    const hitGround = raycaster.intersectObject(groundPlane);
+    if (hitGround.length > 0 && dog.state !== 'sleep' && dog.state !== 'walk_action') {
+        const point = hitGround[0].point;
+        if (point.x * point.x + point.z * point.z < MOVE_RADIUS * MOVE_RADIUS) {
+            selectionIndicator.visible = false;
+            selectedPlacedId = null;
+            clearDirtSelection();
+            dog.changeState('walk', new THREE.Vector3(point.x, 0.4, point.z));
         }
     }
 }

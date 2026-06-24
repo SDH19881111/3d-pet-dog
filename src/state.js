@@ -830,6 +830,13 @@ class GameStateManager {
                 const removed = this.state.placedItems.splice(existingIndex, 1)[0];
                 this.emit("itemRemoved", removed.id);
             }
+        } else if (itemCategory === "toy") {
+            // 장난감은 같은 종류를 최대 2개까지만 설치 가능 (무한 설치 방지)
+            const sameToyCount = this.state.placedItems.filter(i => i.itemId === itemId).length;
+            if (sameToyCount >= 2) {
+                this.emit("notification", `🧸 [${itemInfo.name}]은(는) 최대 2개까지만 놓을 수 있어요!`);
+                return false;
+            }
         }
 
         const placedId = "placed_" + Math.random().toString(36).substr(2, 9);
