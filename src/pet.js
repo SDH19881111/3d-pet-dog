@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { gameState } from './state.js';
+// 캐시 무력화 버전 전파: state.js를 main.js와 동일한 ?v= URL로 import → 모듈/싱글톤 중복 방지
+const __v = new URL(import.meta.url).search;
+const { gameState } = await import(`./state.js${__v}`);
 
 export class ChibiPet {
     constructor(scene) {

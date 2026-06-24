@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { gameState, SHOP_ITEMS } from './state.js';
-import { ChibiPet } from './pet.js';
-import { createItemMesh, createPoopMesh, createTrashMesh } from './items.js';
+
+// 캐시 무력화: 진입 스크립트가 붙인 ?v= 버전을 로컬 하위 모듈에도 동일하게 전파한다.
+// (반드시 같은 URL이어야 모듈이 중복 로드되지 않고 gameState 싱글톤이 1개로 유지됨)
+const __v = new URL(import.meta.url).search;
+const { gameState, SHOP_ITEMS } = await import(`./state.js${__v}`);
+const { ChibiPet } = await import(`./pet.js${__v}`);
+const { createItemMesh, createPoopMesh, createTrashMesh } = await import(`./items.js${__v}`);
 
 // --- 전역 변수 및 게임 환경 설정 ---
 let scene, camera, renderer, controls;

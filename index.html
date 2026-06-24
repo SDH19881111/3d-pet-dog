@@ -248,6 +248,13 @@
     <!-- 하트 파티클 레이어 -->
     <div id="particle-container"></div>
 
-    <script type="module" src="src/main.js"></script>
+    <!-- 캐시 무력화: 접속/새로고침마다 고유 버전(?v=타임스탬프)으로 모든 로컬 모듈을 강제 새로 로드.
+         배포한 수정이 브라우저 캐시 때문에 안 보이는 문제를 근본 차단. (three.js는 CDN @버전이라 그대로 캐시됨) -->
+    <script type="module">
+        const v = Date.now();
+        import(`./src/main.js?v=${v}`).catch((e) => {
+            console.error('모듈 로드 실패:', e);
+        });
+    </script>
 </body>
 </html>
