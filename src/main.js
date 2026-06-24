@@ -190,10 +190,8 @@ function init() {
     // 로컬 저장소에서 데이터 로드 (새로고침 시 자동 로그인 지원)
     gameState.loadState();
     if (gameState.state.username) {
-        document.getElementById('auth-overlay').classList.add('hidden');
-        document.getElementById('ui-container').classList.remove('hidden');
         syncStateTo3D();
-        updateUIBars();
+        showGameUI(false); // 새로고침 자동 로그인: 애니메이션 없이 즉시 표시
     }
 
     animate();
@@ -935,6 +933,36 @@ function bindViewportResize() {
     }
 }
 
+// --- 게임 UI 전환 (인증 → 게임 화면) ---
+// animate=true: 로그인/회원가입 시 패널 슬라이드인 애니메이션 재생
+// animate=false: 새로고침 자동 로그인 시 애니메이션 없이 즉시 표시
+function showGameUI(animate = true) {
+    authOverlay.classList.add('hidden');
+    uiContainer.classList.remove('hidden');
+    updateUIBars();
+
+    if (animate) {
+        // 패널 입장 애니메이션 트리거
+        const header = document.querySelector('.game-header');
+        const statusPanel = document.querySelector('.status-panel');
+        const actionPanel = document.querySelector('.action-panel');
+        header.classList.add('animate-in');
+        statusPanel.classList.add('animate-in');
+        actionPanel.classList.add('animate-in');
+
+        // 애니메이션 종료 후 클래스 제거 (재사용 대비)
+        setTimeout(() => {
+            header.classList.remove('animate-in');
+            statusPanel.classList.remove('animate-in');
+            actionPanel.classList.remove('animate-in');
+        }, 700);
+    }
+
+    // 레이아웃이 안정된 후 렌더러 크기 보정 (애니메이션과 충돌 방지)
+    const delay = animate ? 100 : 0;
+    setTimeout(() => refreshRendererSize(), delay);
+}
+
 // --- 사용자 계정 시스템 UI 제어 ---
 function setupAuthListeners() {
     const tabLogin = document.getElementById('tab-login');
@@ -1003,11 +1031,9 @@ function setupAuthListeners() {
             const data = await res.json();
             
             if (data.success) {
-                authOverlay.classList.add('hidden');
-                uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
-                refreshRendererSize(); // 게임 화면이 드러난 직후 렌더러 크기 재보정 (4등분 방지)
+                showGameUI(true);
                 showNotification(`👋 환영합니다! ${data.username}님, ${gameState.speciesName()} ${data.petState.petName}와 좋은 시간 보내세요!`);
             } else {
                 errorMsg.textContent = data.error || "로그인 실패";
@@ -1020,11 +1046,9 @@ function setupAuthListeners() {
             
             // 오프라인/로컬 테스트 폴백 강제 시작
             setTimeout(() => {
-                authOverlay.classList.add('hidden');
-                uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(username, { petName: "임시바둑이", furColor: "#ffcc80", earType: "floppy" }, false);
                 syncStateTo3D();
-                refreshRendererSize();
+                showGameUI(true);
             }, 1000);
         }
     });
@@ -1060,11 +1084,9 @@ function setupAuthListeners() {
             const data = await res.json();
             
             if (data.success) {
-                authOverlay.classList.add('hidden');
-                uiContainer.classList.remove('hidden');
                 gameState.setLoginSession(data.username, data.petState);
                 syncStateTo3D();
-                refreshRendererSize(); // 게임 화면이 드러난 직후 렌더러 크기 재보정 (4등분 방지)
+                showGameUI(true);
                 showNotification(`🎉 성공적으로 입양되었습니다! 마당에서 ${gameState.speciesName()} ${petName}를 반겨주세요!`);
             } else {
                 errorMsg.textContent = data.error || "회원가입 실패";
@@ -1076,12 +1098,10 @@ function setupAuthListeners() {
             errorMsg.classList.remove('hidden');
 
             setTimeout(() => {
-                authOverlay.classList.add('hidden');
-                uiContainer.classList.remove('hidden');
                 const localPetState = { petName, furColor, earType, species };
                 gameState.setLoginSession(username, localPetState, false);
                 syncStateTo3D();
-                refreshRendererSize();
+                showGameUI(true);
             }, 1200);
         }
     });

@@ -355,7 +355,6 @@ body, html {
     border: 1px solid var(--panel-border);
     border-radius: 24px;
     box-shadow: var(--shadow);
-    animation: slideDown 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .pet-profile {
@@ -491,7 +490,6 @@ body, html {
     border: 1px solid var(--panel-border);
     border-radius: 24px;
     box-shadow: var(--shadow);
-    animation: slideRight 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .status-item {
@@ -602,7 +600,6 @@ body, html {
     border: 1px solid var(--panel-border);
     border-radius: 24px;
     box-shadow: var(--shadow);
-    animation: slideUp 0.6s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .action-btn {
@@ -890,3 +887,8 @@ body, html {
     50% { opacity: 1; }
     100% { transform: translateY(-100px) translateX(var(--tx, 0px)) scale(1.2); opacity: 0; }
 }
+
+/* Class-triggered entry animations (JS에서 .animate-in 추가 시에만 재생) */
+.game-header.animate-in { animation: slideDown 0.6s cubic-bezier(0.25, 1, 0.5, 1); }
+.status-panel.animate-in { animation: slideRight 0.6s cubic-bezier(0.25, 1, 0.5, 1); }
+.action-panel.animate-in { animation: slideUp 0.6s cubic-bezier(0.25, 1, 0.5, 1); }
